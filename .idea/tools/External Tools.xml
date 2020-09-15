@@ -1,0 +1,16 @@
+<toolSet name="External Tools">
+  <tool name="Build script" showInMainMenu="false" showInEditor="false" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="false" showConsoleOnStdErr="false" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="$USER_HOME$/Documents/CS451/CS451-2020-project/template_cpp/build.sh" />
+      <option name="PARAMETERS" />
+      <option name="WORKING_DIRECTORY" value="$USER_HOME$/Documents/CS451/CS451-2020-project/template_cpp" />
+    </exec>
+  </tool>
+  <tool name="Cleanup script" showInMainMenu="false" showInEditor="false" showInProject="false" showInSearchPopup="false" disabled="false" useConsole="true" showConsoleOnStdOut="false" showConsoleOnStdErr="false" synchronizeAfterRun="true">
+    <exec>
+      <option name="COMMAND" value="$USER_HOME$/Documents/CS451/CS451-2020-project/template_cpp/cleanup.sh" />
+      <option name="PARAMETERS" />
+      <option name="WORKING_DIRECTORY" value="$USER_HOME$/Documents/CS451/CS451-2020-project/template_cpp" />
+    </exec>
+  </tool>
+</toolSet>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CLionExternalBuildManager">
+    <target id="0f122d80-890c-4317-95ed-2e3f0199f6af" name="Custom Build" defaultType="TOOL">
+      <configuration id="060e32f8-e59a-4c2f-bc52-9b2fa6a4d3ae" name="Custom Build">
+        <build type="TOOL">
+          <tool actionId="Tool_External Tools_Build script" />
+        </build>
+        <clean type="TOOL">
+          <tool actionId="Tool_External Tools_Cleanup script" />
+        </clean>
+      </configuration>
+    </target>
+  </component>
+</project>
