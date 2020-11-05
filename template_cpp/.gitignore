@@ -5,6 +5,7 @@
 
 bin/da_proc
 target/
+cmake-build-debug/
 
 ### C ###
 # Prerequisites
