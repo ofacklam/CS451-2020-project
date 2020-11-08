@@ -1,12 +1,15 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
+#include <csignal>
 
 #include "barrier.hpp"
 #include "parser.hpp"
 #include "hello.h"
-#include <signal.h>
+#include "fairLossLink.hpp"
 
+
+Stoppable *broadcaster = nullptr;
 
 static void stop(int) {
     // reset signal handlers to default
@@ -15,6 +18,8 @@ static void stop(int) {
 
     // immediately stop network packet processing
     std::cout << "Immediately stopping network packet processing.\n";
+    if (broadcaster)
+        broadcaster->stop();
 
     // write/flush output file if necessary
     std::cout << "Writing output.\n";
@@ -92,10 +97,24 @@ int main(int argc, char **argv) {
 
     Coordinator coordinator(parser.id(), barrier, signal);
 
+    unsigned long peerID = 0;
+    for (auto &h: parser.hosts()) {
+        if (h.id != parser.id()) {
+            peerID = h.id;
+            break;
+        }
+    }
+    FairLossLink<unsigned> link(parser.id(), parser.hosts(), [](unsigned msg, long size, unsigned long src) {
+        std::cout << "Got message #" << msg << " from source " << src << std::endl;
+    });
+
     std::cout << "Waiting for all processes to finish initialization\n\n";
     coordinator.waitOnBarrier();
 
     std::cout << "Broadcasting messages...\n\n";
+    for (unsigned i = 0; i < 10; i++) {
+        link.flSend(i, peerID);
+    }
 
     std::cout << "Signaling end of broadcasting messages\n\n";
     coordinator.finishedBroadcasting();
