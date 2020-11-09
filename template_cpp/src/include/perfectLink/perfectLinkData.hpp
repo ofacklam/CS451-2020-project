@@ -12,17 +12,17 @@
 
 
 template<class T>
-class DataPacket : public Serializable {
+class PlDataPacket : public Serializable {
 public:
     sequence id;
-    T payload;
+    T payload{};
     bool isData;
 
-    DataPacket() : id(0), isData(false) {}
+    PlDataPacket() : id(0), isData(false) {}
 
-    explicit DataPacket(sequence seq) : id(seq), isData(false) {}
+    explicit PlDataPacket(sequence seq) : id(seq), isData(false) {}
 
-    DataPacket(sequence id, T payload) : id(id), payload(payload), isData(true) {}
+    PlDataPacket(sequence id, T payload) : id(id), payload(payload), isData(true) {}
 
     void serialize(std::ostream &os) override;
 
@@ -30,7 +30,7 @@ public:
 };
 
 template<class T>
-void DataPacket<T>::serialize(std::ostream &os) {
+void PlDataPacket<T>::serialize(std::ostream &os) {
     sequence netId = Utils::htonT(id);
     os.write(reinterpret_cast<char *>(&netId), sizeof(netId));
 
@@ -40,12 +40,12 @@ void DataPacket<T>::serialize(std::ostream &os) {
 }
 
 template<class T>
-void DataPacket<T>::deserialize(std::istream &is) {
+void PlDataPacket<T>::deserialize(std::istream &is) {
     sequence netId;
     is.read(reinterpret_cast<char *>(&netId), sizeof(netId));
     id = Utils::ntohT(netId);
 
-    if (is.eof()) {
+    if (is.peek() == std::char_traits<char>::eof()) {
         isData = false;
     } else {
         payload.deserialize(is);

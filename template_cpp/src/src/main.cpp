@@ -124,22 +124,20 @@ int main(int argc, char **argv) {
             break;
         }
     }
-    FairLossLink<DataPacket<Integer<unsigned>>> link(parser.id(), parser.hosts(),
-                                                     [](const DataPacket<Integer<unsigned>> &msg, unsigned long src) {
-                                                         //std::cout << std::endl;
-                                                         std::cout << "Got message <" << msg.id << ", "
-                                                                   << msg.payload.val_
-                                                                   << "> from source " << src << std::endl;
-                                                     });
+    PerfectLink<Integer<unsigned>> link(parser.id(), parser.hosts(),
+                                        [](const Integer<unsigned> &msg, unsigned long src) {
+                                            std::cout << "Got message <" << msg.val_
+                                                      << "> from source " << src << std::endl;
+                                        });
 
     std::cout << "Waiting for all processes to finish initialization\n\n";
     coordinator.waitOnBarrier();
 
     std::cout << "Broadcasting messages...\n\n";
     for (unsigned i = 0; i < 10; i++) {
-        DataPacket<Integer<unsigned>> msg(i, Integer(i));
-        //std::cout << "DataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
-        link.flSend(msg, peerID);
+        Integer<unsigned> msg(i);
+        //std::cout << "PlDataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
+        link.pSend(msg, peerID);
     }
 
     std::cout << "Signaling end of broadcasting messages\n\n";
