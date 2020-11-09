@@ -11,8 +11,9 @@
 #include <netdb.h>
 #include <unordered_map>
 
-#include "stoppable.hpp"
-#include "utils.hpp"
+#include "../stoppable.hpp"
+#include "serializable.hpp"
+#include "../utils.hpp"
 
 
 /**
@@ -29,7 +30,7 @@ private:
     std::unordered_map<in_addr_t, std::unordered_map<in_port_t, unsigned long>> addressToId;
 
     // Receiving structures
-    std::function<void(T, long, unsigned long)> flDeliver;
+    std::function<void(T, unsigned long)> flDeliver;
 
     // Workers
     std::thread receiver;
@@ -37,7 +38,7 @@ private:
 public:
     FairLossLink(unsigned long id,
                  const std::vector<Parser::Host> &hosts,
-                 const std::function<void(T, long, unsigned long)> &flDeliver);
+                 const std::function<void(T, unsigned long)> &flDeliver);
 
     void flSend(T msg, unsigned long dst);
 
@@ -53,8 +54,11 @@ protected:
 template<class T>
 FairLossLink<T>::FairLossLink(unsigned long id,
                               const std::vector<Parser::Host> &hosts,
-                              const std::function<void(T, long, unsigned long)> &flDeliver)
+                              const std::function<void(T, unsigned long)> &flDeliver)
         : ownId(id), flDeliver(flDeliver) {
+    // Verify correct data type
+    static_assert(std::is_base_of_v<Serializable, T>, "Fair-loss link template parameter is not serializable!");
+
     // Create correspondence maps id <-> address
     for (auto &h: hosts) {
         auto address = Utils::getSocketAddress(h);
@@ -88,15 +92,17 @@ bool FairLossLink<T>::setupSocket() {
 
 template<class T>
 void FairLossLink<T>::flSend(T msg, unsigned long dst) {
-    if (!shouldStop()) {
+    if (!shouldStop() && idToAddress.count(dst) > 0) {
         // Get destination address
         auto &dstAddr = idToAddress[dst];
 
         // Convert message
-        auto netMsg = Utils::htonT<T>(msg);
+        std::ostringstream netMsg;
+        msg.serialize(netMsg);
 
         // Send to socket
-        sendto(socketFD, &netMsg, sizeof(netMsg), 0, reinterpret_cast<sockaddr *>(&dstAddr), sizeof(dstAddr));
+        sendto(socketFD, netMsg.str().data(), netMsg.str().size(), 0,
+               reinterpret_cast<sockaddr *>(&dstAddr), sizeof(dstAddr));
     }
 }
 
@@ -105,7 +111,7 @@ template<class T>
 void FairLossLink<T>::receiveLoop() {
     while (!shouldStop()) {
         // Receive a packet from network
-        T netMsg;
+        char netMsg[sizeof(T)];
         sockaddr_storage srcAddr{};
         socklen_t addrLen = sizeof(srcAddr);
         auto size = recvfrom(socketFD, &netMsg, sizeof(netMsg), 0, reinterpret_cast<sockaddr *>(&srcAddr), &addrLen);
@@ -116,14 +122,17 @@ void FairLossLink<T>::receiveLoop() {
         // Only treat non-empty messages from IPv4 addresses
         if (size > 0 && srcAddr.ss_family == AF_INET) {
             // Convert message
-            T msg = Utils::ntohT<T>(netMsg);
+            T msg;
+            std::stringstream ss;
+            ss.write(netMsg, size);
+            msg.deserialize(ss);
 
             // Extract host ID
             auto src = reinterpret_cast<sockaddr_in *>(&srcAddr);
             auto id = addressToId[src->sin_addr.s_addr][src->sin_port];
 
             // Deliver
-            flDeliver(msg, size, id);
+            flDeliver(msg, id);
         }
     }
 }

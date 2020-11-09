@@ -6,8 +6,28 @@
 #include "barrier.hpp"
 #include "parser.hpp"
 #include "hello.h"
-#include "fairLossLink.hpp"
+#include "perfectLink/perfectLink.hpp"
 
+template<class T>
+class Integer : public Serializable {
+public:
+    T val_;
+
+    Integer() = default;
+
+    explicit Integer(T val) : val_(val) {}
+
+    void serialize(std::ostream &os) override {
+        T netVal = Utils::htonT(val_);
+        os.write(reinterpret_cast<char *>(&netVal), sizeof(netVal));
+    }
+
+    void deserialize(std::istream &is) override {
+        T netVal;
+        is.read(reinterpret_cast<char *>(&netVal), sizeof(netVal));
+        val_ = Utils::ntohT(netVal);
+    }
+};
 
 Stoppable *broadcaster = nullptr;
 
@@ -104,16 +124,22 @@ int main(int argc, char **argv) {
             break;
         }
     }
-    FairLossLink<unsigned> link(parser.id(), parser.hosts(), [](unsigned msg, long size, unsigned long src) {
-        std::cout << "Got message #" << msg << " from source " << src << std::endl;
-    });
+    FairLossLink<DataPacket<Integer<unsigned>>> link(parser.id(), parser.hosts(),
+                                                     [](const DataPacket<Integer<unsigned>> &msg, unsigned long src) {
+                                                         //std::cout << std::endl;
+                                                         std::cout << "Got message <" << msg.id << ", "
+                                                                   << msg.payload.val_
+                                                                   << "> from source " << src << std::endl;
+                                                     });
 
     std::cout << "Waiting for all processes to finish initialization\n\n";
     coordinator.waitOnBarrier();
 
     std::cout << "Broadcasting messages...\n\n";
     for (unsigned i = 0; i < 10; i++) {
-        link.flSend(i, peerID);
+        DataPacket<Integer<unsigned>> msg(i, Integer(i));
+        //std::cout << "DataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
+        link.flSend(msg, peerID);
     }
 
     std::cout << "Signaling end of broadcasting messages\n\n";

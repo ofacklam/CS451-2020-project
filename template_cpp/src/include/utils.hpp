@@ -33,6 +33,13 @@ namespace Utils {
         address.sin_port = host.port;
         return address;
     }
+
+    inline void printBytes(char *ptr, unsigned long size) {
+        for(ulong i = 0; i < size; i++) {
+            std::cout << unsigned(ptr[i]) << " ";
+        }
+        std::cout << std::endl;
+    }
 }
 
 
