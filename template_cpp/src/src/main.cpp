@@ -6,7 +6,7 @@
 #include "barrier.hpp"
 #include "parser.hpp"
 #include "hello.h"
-#include "perfectLink/perfectLink.hpp"
+#include "bebBroadcast/bebBroadcast.hpp"
 
 template<class T>
 class Integer : public Serializable {
@@ -117,18 +117,12 @@ int main(int argc, char **argv) {
 
     Coordinator coordinator(parser.id(), barrier, signal);
 
-    unsigned long peerID = 0;
-    for (auto &h: parser.hosts()) {
-        if (h.id != parser.id()) {
-            peerID = h.id;
-            break;
-        }
-    }
-    PerfectLink<Integer<unsigned>> link(parser.id(), parser.hosts(),
+    BebBroadcast<Integer<unsigned>> broadcast(parser.id(), parser.hosts(),
                                         [](const Integer<unsigned> &msg, unsigned long src) {
                                             std::cout << "Got message <" << msg.val_
                                                       << "> from source " << src << std::endl;
                                         });
+    broadcaster = &broadcast;
 
     std::cout << "Waiting for all processes to finish initialization\n\n";
     coordinator.waitOnBarrier();
@@ -137,7 +131,7 @@ int main(int argc, char **argv) {
     for (unsigned i = 0; i < 10; i++) {
         Integer<unsigned> msg(i);
         //std::cout << "PlDataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
-        link.pSend(msg, peerID);
+        broadcast.bebBroadcast(msg);
     }
 
     std::cout << "Signaling end of broadcasting messages\n\n";
