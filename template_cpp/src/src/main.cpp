@@ -6,7 +6,7 @@
 #include "barrier.hpp"
 #include "parser.hpp"
 #include "hello.h"
-#include "urbBroadcast/urbBroadcast.hpp"
+#include "fifoBroadcast/fifoBroadcast.hpp"
 
 template<class T>
 class Integer : public Serializable {
@@ -114,11 +114,11 @@ int main(int argc, char **argv) {
 
     Coordinator coordinator(parser.id(), barrier, signal);
 
-    UrbBroadcast<Integer<unsigned>> broadcast(parser.id(), parser.hosts(),
-                                        [](const Integer<unsigned> &msg, unsigned long src) {
-                                            std::cout << "Got message <" << msg.val_
-                                                      << "> from source " << src << std::endl;
-                                        });
+    FifoBroadcast<Integer<unsigned>> broadcast(parser.id(), parser.hosts(),
+                                              [](const Integer<unsigned> &msg, unsigned long src) {
+                                                  std::cout << "Got message <" << msg.val_
+                                                            << "> from source " << src << std::endl;
+                                              });
     broadcaster = &broadcast;
 
     std::cout << "Waiting for all processes to finish initialization\n\n";
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
     for (unsigned i = 0; i < 200000; i++) {
         Integer<unsigned> msg(i);
         //std::cout << "PlDataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
-        broadcast.urbBroadcast(msg);
+        broadcast.fifoBroadcast(msg);
     }
 
     std::cout << "Signaling end of broadcasting messages\n\n";

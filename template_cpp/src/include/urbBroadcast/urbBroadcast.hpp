@@ -32,7 +32,7 @@ private:
 
     // Receiving structures
     UrbReceptionStore receptionStore;
-    std::function<void(T, unsigned long)> urbDeliver;
+    std::function<void(T, unsigned long, sequence)> urbDeliver;
 
     // Worker
     std::thread prioritySender;
@@ -40,7 +40,7 @@ private:
 public:
     UrbBroadcast(unsigned long id,
                  const std::vector<Parser::Host> &hosts,
-                 const std::function<void(T, unsigned long)> &urbDeliver,
+                 const std::function<void(T, unsigned long, sequence)> &urbDeliver,
                  unsigned long long capacity = 100);
 
     void urbBroadcast(T msg);
@@ -56,7 +56,7 @@ protected:
 
 template<class T>
 UrbBroadcast<T>::UrbBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
-                              const std::function<void(T, unsigned long)> &urbDeliver,
+                              const std::function<void(T, unsigned long, sequence)> &urbDeliver,
                               unsigned long long capacity)
         : beb(id, hosts, std::bind(&UrbBroadcast::bebDeliver, this, false, _1, _2)), ownID(id),
           nextID(0), appQueue(capacity), internalQueue(0),
@@ -87,7 +87,7 @@ void UrbBroadcast<T>::bebDeliver(bool fromApp, UrbDataPacket<T> msg, unsigned lo
         }
 
         if (canDeliver)
-            urbDeliver(msg.data, msg.emitter);
+            urbDeliver(msg.data, msg.emitter, msg.seq);
     }
 }
 
