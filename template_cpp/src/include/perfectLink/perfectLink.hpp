@@ -26,17 +26,12 @@ using namespace std::placeholders;
 template<class T>
 class PerfectLink : public Stoppable {
 private:
-    struct SendInfo {
-        PlDataPacket<T> msg;
-        unsigned long dst;
-    };
-
     // Connection
     FairLossLink<PlDataPacket<T>> flLink;
 
     // Sending structures
     std::unordered_map<unsigned long, std::atomic<sequence>> nextIDs;
-    SynchronizedQueue<SendInfo> sendQueue;
+    std::unordered_map<unsigned long, SynchronizedQueue<PlDataPacket<T>>> sendQueues;
     std::unordered_map<unsigned long, SequenceNumberStore> storeACKed;
 
     // Receiving structures
@@ -52,13 +47,12 @@ public:
     PerfectLink(unsigned long id,
                 const std::vector<Parser::Host> &hosts,
                 const std::function<void(T, unsigned long)> &pDeliver,
-                unsigned long long capacity = 100,
                 unsigned numWorkers = 10);
 
     void pSend(T payload, unsigned long dst);
 
 private:
-    void sendLoop();
+    void sendLoop(unsigned long dst);
 
     void flDeliver(PlDataPacket<T> dp, unsigned long src);
 
@@ -72,17 +66,20 @@ protected:
 template<class T>
 PerfectLink<T>::PerfectLink(unsigned long id, const std::vector<Parser::Host> &hosts,
                             const std::function<void(T, unsigned long)> &pDeliver,
-                            unsigned long long int capacity, unsigned int numWorkers)
+                            unsigned int numWorkers)
         : flLink(id, hosts, std::bind(&PerfectLink::flDeliver, this, _1, _2)),
-          sendQueue(capacity), deliverQueue(0), pDeliver(pDeliver),
-          senders(numWorkers), deliverer(&PerfectLink::deliverLoop, this) {
+          pDeliver(pDeliver),
+          senders(numWorkers * hosts.size()), deliverer(&PerfectLink::deliverLoop, this) {
     // Set up sequence numbers
     for (auto &h: hosts)
         nextIDs[h.id] = 0;
 
     // Set up workers
-    for (auto &s: senders)
-        s = std::thread(&PerfectLink::sendLoop, this);
+    for (unsigned i = 0; i < hosts.size(); i++) {
+        for (unsigned j = 0; j < numWorkers; j++) {
+            senders[i * numWorkers + j] = std::thread(&PerfectLink::sendLoop, this, hosts[i].id);
+        }
+    }
 }
 
 template<class T>
@@ -91,22 +88,20 @@ void PerfectLink<T>::pSend(T payload, unsigned long dst) {
         return;
 
     sequence id = nextIDs[dst]++;
-    sendQueue.enqueue(SendInfo{PlDataPacket{id, payload}, dst});
+    sendQueues[dst].enqueue(PlDataPacket{id, payload});
 }
 
 template<class T>
-void PerfectLink<T>::sendLoop() {
+void PerfectLink<T>::sendLoop(unsigned long dst) {
     while (!shouldStop()) {
         // Get next packet to send
-        SendInfo info{};
-        bool success = sendQueue.dequeue(&info, 100);
+        PlDataPacket<T> msg{};
+        bool success = sendQueues[dst].dequeue(&msg, 100);
 
         if (shouldStop())
             break;
 
         if (success) {
-            auto msg = info.msg;
-            auto dst = info.dst;
             // Send the packet, at regular intervals
             while (!storeACKed[dst].contains(msg.id) && !shouldStop()) {
                 flLink.flSend(msg, dst);
@@ -158,6 +153,7 @@ void PerfectLink<T>::waitForStop() {
     for (std::thread &s: senders)
         s.join();
     deliverer.join();
+    std::cout << "Stopped PerfectLink" << std::endl;
 }
 
 #endif //DA_PROJECT_PERFECTLINK_HPP

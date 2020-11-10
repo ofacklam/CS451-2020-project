@@ -141,8 +141,8 @@ template<class T>
 void FairLossLink<T>::waitForStop() {
     // Wait for receiver to terminate & close socket
     receiver.join();
-    std::cout << "Closing socket" << std::endl;
     close(socketFD);
+    std::cout << "Closed socket" << std::endl;
 }
 
 #endif //DA_PROJECT_FAIRLOSSLINK_HPP

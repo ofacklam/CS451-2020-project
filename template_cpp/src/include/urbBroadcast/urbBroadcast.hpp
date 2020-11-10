@@ -27,20 +27,28 @@ private:
 
     // Sending structures
     std::atomic<sequence> nextID;
+    SynchronizedQueue<UrbDataPacket<T>> appQueue;
+    SynchronizedQueue<UrbDataPacket<T>> internalQueue;
 
     // Receiving structures
     UrbReceptionStore receptionStore;
     std::function<void(T, unsigned long)> urbDeliver;
 
+    // Worker
+    std::thread prioritySender;
+
 public:
     UrbBroadcast(unsigned long id,
                  const std::vector<Parser::Host> &hosts,
-                 const std::function<void(T, unsigned long)> &urbDeliver);
+                 const std::function<void(T, unsigned long)> &urbDeliver,
+                 unsigned long long capacity = 100);
 
     void urbBroadcast(T msg);
 
 private:
-    void bebDeliver(UrbDataPacket<T> msg, unsigned long src);
+    void bebDeliver(bool fromApp, UrbDataPacket<T> msg, unsigned long src);
+
+    void sendLoop();
 
 protected:
     void waitForStop() override;
@@ -48,28 +56,35 @@ protected:
 
 template<class T>
 UrbBroadcast<T>::UrbBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
-                              const std::function<void(T, unsigned long)> &urbDeliver)
-        : beb(id, hosts, std::bind(&UrbBroadcast::bebDeliver, this, _1, _2)),
-          ownID(id), nextID(0), receptionStore(hosts.size()), urbDeliver(urbDeliver) {}
+                              const std::function<void(T, unsigned long)> &urbDeliver,
+                              unsigned long long capacity)
+        : beb(id, hosts, std::bind(&UrbBroadcast::bebDeliver, this, false, _1, _2)), ownID(id),
+          nextID(0), appQueue(capacity), internalQueue(0),
+          receptionStore(hosts.size()), urbDeliver(urbDeliver),
+          prioritySender(&UrbBroadcast::sendLoop, this) {}
 
 template<class T>
 void UrbBroadcast<T>::urbBroadcast(T msg) {
     if (!shouldStop()) {
         sequence seq = nextID++;
         UrbDataPacket<T> data(ownID, seq, msg);
-        bebDeliver(data, ownID);
+        bebDeliver(true, data, ownID);
     }
 }
 
 template<class T>
-void UrbBroadcast<T>::bebDeliver(UrbDataPacket<T> msg, unsigned long src) {
+void UrbBroadcast<T>::bebDeliver(bool fromApp, UrbDataPacket<T> msg, unsigned long src) {
     if (!shouldStop()) {
         std::pair<bool, bool> newMsg = receptionStore.addMessage(msg.emitter, msg.seq, src);
         bool isNew = newMsg.first;
         bool canDeliver = newMsg.second;
 
-        if (isNew)
-            beb.bebBroadcast(msg);
+        if (isNew) {
+            if (fromApp)
+                appQueue.enqueue(msg);
+            else
+                internalQueue.enqueue(msg);
+        }
 
         if (canDeliver)
             urbDeliver(msg.data, msg.emitter);
@@ -77,8 +92,29 @@ void UrbBroadcast<T>::bebDeliver(UrbDataPacket<T> msg, unsigned long src) {
 }
 
 template<class T>
+void UrbBroadcast<T>::sendLoop() {
+    while (!shouldStop()) {
+        UrbDataPacket<T> msg{};
+
+        // Try getting from internalQueue (higher priority)
+        bool success = internalQueue.dequeue(&msg, 100);
+
+        // Only if internalQueue is empty, try appQueue
+        if (!success)
+            success = appQueue.dequeue(&msg, 100);
+
+        if (shouldStop())
+            break;
+
+        if (success)
+            beb.bebBroadcast(msg);
+    }
+}
+
+template<class T>
 void UrbBroadcast<T>::waitForStop() {
     beb.stop();
+    prioritySender.join();
 }
 
 #endif //DA_PROJECT_URBBROADCAST_HPP

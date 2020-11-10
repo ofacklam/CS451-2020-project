@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
     coordinator.waitOnBarrier();
 
     std::cout << "Broadcasting messages...\n\n";
-    for (unsigned i = 0; i < 200; i++) {
+    for (unsigned i = 0; i < 200000; i++) {
         Integer<unsigned> msg(i);
         //std::cout << "PlDataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
         broadcast.urbBroadcast(msg);
