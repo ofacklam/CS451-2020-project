@@ -24,6 +24,19 @@ namespace Utils {
         return Utils::htonT<T>(t);
     }
 
+    template<class T>
+    inline void serializeNumericType(T t, std::ostream &os) {
+        auto netVal = Utils::htonT(t);
+        os.write(reinterpret_cast<char *>(&netVal), sizeof(netVal));
+    }
+
+    template<class T>
+    inline T deserializeNumericType(std::istream &is) {
+        T netVal;
+        is.read(reinterpret_cast<char*>(&netVal), sizeof(netVal));
+        return Utils::ntohT(netVal);
+    }
+
     // Taken from "barrier.hpp" logic
     inline sockaddr_in getSocketAddress(Parser::Host host) {
         sockaddr_in address{};
@@ -35,7 +48,7 @@ namespace Utils {
     }
 
     inline void printBytes(char *ptr, unsigned long size) {
-        for(ulong i = 0; i < size; i++) {
+        for (ulong i = 0; i < size; i++) {
             std::cout << unsigned(ptr[i]) << " ";
         }
         std::cout << std::endl;

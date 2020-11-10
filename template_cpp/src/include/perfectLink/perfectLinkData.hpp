@@ -31,8 +31,7 @@ public:
 
 template<class T>
 void PlDataPacket<T>::serialize(std::ostream &os) {
-    sequence netId = Utils::htonT(id);
-    os.write(reinterpret_cast<char *>(&netId), sizeof(netId));
+    Utils::serializeNumericType(id, os);
 
     if (isData) {
         payload.serialize(os);
@@ -41,9 +40,7 @@ void PlDataPacket<T>::serialize(std::ostream &os) {
 
 template<class T>
 void PlDataPacket<T>::deserialize(std::istream &is) {
-    sequence netId;
-    is.read(reinterpret_cast<char *>(&netId), sizeof(netId));
-    id = Utils::ntohT(netId);
+    id = Utils::deserializeNumericType<sequence>(is);
 
     if (is.peek() == std::char_traits<char>::eof()) {
         isData = false;

@@ -6,7 +6,7 @@
 #include "barrier.hpp"
 #include "parser.hpp"
 #include "hello.h"
-#include "bebBroadcast/bebBroadcast.hpp"
+#include "urbBroadcast/urbBroadcast.hpp"
 
 template<class T>
 class Integer : public Serializable {
@@ -18,14 +18,11 @@ public:
     explicit Integer(T val) : val_(val) {}
 
     void serialize(std::ostream &os) override {
-        T netVal = Utils::htonT(val_);
-        os.write(reinterpret_cast<char *>(&netVal), sizeof(netVal));
+        Utils::serializeNumericType(val_, os);
     }
 
     void deserialize(std::istream &is) override {
-        T netVal;
-        is.read(reinterpret_cast<char *>(&netVal), sizeof(netVal));
-        val_ = Utils::ntohT(netVal);
+        val_ = Utils::deserializeNumericType<T>(is);
     }
 };
 
@@ -117,7 +114,7 @@ int main(int argc, char **argv) {
 
     Coordinator coordinator(parser.id(), barrier, signal);
 
-    BebBroadcast<Integer<unsigned>> broadcast(parser.id(), parser.hosts(),
+    UrbBroadcast<Integer<unsigned>> broadcast(parser.id(), parser.hosts(),
                                         [](const Integer<unsigned> &msg, unsigned long src) {
                                             std::cout << "Got message <" << msg.val_
                                                       << "> from source " << src << std::endl;
@@ -131,7 +128,7 @@ int main(int argc, char **argv) {
     for (unsigned i = 0; i < 10; i++) {
         Integer<unsigned> msg(i);
         //std::cout << "PlDataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
-        broadcast.bebBroadcast(msg);
+        broadcast.urbBroadcast(msg);
     }
 
     std::cout << "Signaling end of broadcasting messages\n\n";
