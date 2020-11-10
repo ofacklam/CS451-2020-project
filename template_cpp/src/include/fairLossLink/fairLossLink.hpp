@@ -114,7 +114,7 @@ void FairLossLink<T>::receiveLoop() {
         char netMsg[sizeof(T)];
         sockaddr_storage srcAddr{};
         socklen_t addrLen = sizeof(srcAddr);
-        auto size = recvfrom(socketFD, &netMsg, sizeof(netMsg), 0, reinterpret_cast<sockaddr *>(&srcAddr), &addrLen);
+        auto size = recvfrom(socketFD, netMsg, sizeof(netMsg), 0, reinterpret_cast<sockaddr *>(&srcAddr), &addrLen);
 
         if (shouldStop())
             break;

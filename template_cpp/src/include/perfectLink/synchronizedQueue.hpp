@@ -25,12 +25,14 @@ private:
     unsigned long long capacity;
 
 public:
+    SynchronizedQueue() : capacity(0) {}
+
     explicit SynchronizedQueue(unsigned long long capacity) : capacity(capacity) {}
 
     void enqueue(T elem) {
         // Wait for queue to have sufficient capacity
         std::unique_lock<std::mutex> lk(m);
-        c.wait(lk, [this] { return q.size() < capacity; });
+        c.wait(lk, [this] { return capacity == 0 || q.size() < capacity; });
 
         // Enqueue
         q.push(elem);
@@ -44,7 +46,7 @@ public:
         // Wait for queue to be non-empty
         std::unique_lock<std::mutex> lk(m);
         bool success = c.wait_for(lk, ms * 1ms, [this] { return !q.empty(); });
-        if(!success)
+        if (!success)
             return false;
 
         // Dequeue

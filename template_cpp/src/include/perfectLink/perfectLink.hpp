@@ -36,15 +36,17 @@ private:
 
     // Sending structures
     std::unordered_map<unsigned long, std::atomic<sequence>> nextIDs;
-    SynchronizedQueue<SendInfo> queue;
+    SynchronizedQueue<SendInfo> sendQueue;
     std::unordered_map<unsigned long, SequenceNumberStore> storeACKed;
 
     // Receiving structures
     std::unordered_map<unsigned long, SequenceNumberStore> storeDelivered;
+    SynchronizedQueue<std::pair<T, unsigned long>> deliverQueue;
     std::function<void(T, unsigned long)> pDeliver;
 
     // Workers
     std::vector<std::thread> senders;
+    std::thread deliverer;
 
 public:
     PerfectLink(unsigned long id,
@@ -60,6 +62,8 @@ private:
 
     void flDeliver(PlDataPacket<T> dp, unsigned long src);
 
+    void deliverLoop();
+
 protected:
     void waitForStop() override;
 };
@@ -70,7 +74,8 @@ PerfectLink<T>::PerfectLink(unsigned long id, const std::vector<Parser::Host> &h
                             const std::function<void(T, unsigned long)> &pDeliver,
                             unsigned long long int capacity, unsigned int numWorkers)
         : flLink(id, hosts, std::bind(&PerfectLink::flDeliver, this, _1, _2)),
-          queue(capacity), pDeliver(pDeliver), senders(numWorkers) {
+          sendQueue(capacity), deliverQueue(0), pDeliver(pDeliver),
+          senders(numWorkers), deliverer(&PerfectLink::deliverLoop, this) {
     // Set up sequence numbers
     for (auto &h: hosts)
         nextIDs[h.id] = 0;
@@ -86,7 +91,7 @@ void PerfectLink<T>::pSend(T payload, unsigned long dst) {
         return;
 
     sequence id = nextIDs[dst]++;
-    queue.enqueue(SendInfo{PlDataPacket{id, payload}, dst});
+    sendQueue.enqueue(SendInfo{PlDataPacket{id, payload}, dst});
 }
 
 template<class T>
@@ -94,11 +99,10 @@ void PerfectLink<T>::sendLoop() {
     while (!shouldStop()) {
         // Get next packet to send
         SendInfo info{};
-        bool success = queue.dequeue(&info, 100);
+        bool success = sendQueue.dequeue(&info, 100);
 
-        if (shouldStop()) {
+        if (shouldStop())
             break;
-        }
 
         if (success) {
             auto msg = info.msg;
@@ -122,11 +126,26 @@ void PerfectLink<T>::flDeliver(PlDataPacket<T> dp, unsigned long src) {
             flLink.flSend(ack, src);
             bool delivered = storeDelivered[src].add(dp.id);
             if (!delivered)
-                pDeliver(dp.payload, src);
+                deliverQueue.enqueue(std::make_pair(dp.payload, src));
         } else {
             // ACK packet: add to storeACKed
             storeACKed[src].add(dp.id);
         }
+    }
+}
+
+template<class T>
+void PerfectLink<T>::deliverLoop() {
+    while (!shouldStop()) {
+        // Get next packet to deliver
+        std::pair<T, unsigned long> pkt{};
+        bool success = deliverQueue.dequeue(&pkt, 100);
+
+        if (shouldStop())
+            break;
+
+        if (success)
+            pDeliver(pkt.first, pkt.second);
     }
 }
 
@@ -138,6 +157,7 @@ void PerfectLink<T>::waitForStop() {
     // Wait for threads to terminate
     for (std::thread &s: senders)
         s.join();
+    deliverer.join();
 }
 
 #endif //DA_PROJECT_PERFECTLINK_HPP
