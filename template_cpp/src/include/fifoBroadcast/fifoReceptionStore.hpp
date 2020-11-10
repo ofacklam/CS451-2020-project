@@ -6,6 +6,11 @@
 #define DA_PROJECT_FIFORECEPTIONSTORE_HPP
 
 #include <mutex>
+#include <unordered_map>
+#include <functional>
+#include <iostream>
+
+#include "../perfectLink/sequenceNumberStore.hpp"
 
 
 template<class T>

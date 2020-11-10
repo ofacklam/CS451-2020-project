@@ -6,27 +6,10 @@
 #include "barrier.hpp"
 #include "parser.hpp"
 #include "hello.h"
-#include "fifoBroadcast/fifoBroadcast.hpp"
+#include "broadcaster.hpp"
 
-template<class T>
-class Integer : public Serializable {
-public:
-    T val_;
 
-    Integer() = default;
-
-    explicit Integer(T val) : val_(val) {}
-
-    void serialize(std::ostream &os) override {
-        Utils::serializeNumericType(val_, os);
-    }
-
-    void deserialize(std::istream &is) override {
-        val_ = Utils::deserializeNumericType<T>(is);
-    }
-};
-
-Stoppable *broadcaster = nullptr;
+Broadcaster *broadcaster = nullptr;
 
 static void stop(int) {
     // reset signal handlers to default
@@ -40,6 +23,8 @@ static void stop(int) {
 
     // write/flush output file if necessary
     std::cout << "Writing output.\n";
+    if (broadcaster)
+        broadcaster->writeOutput();
 
     // exit directly from signal handler
     exit(0);
@@ -114,22 +99,14 @@ int main(int argc, char **argv) {
 
     Coordinator coordinator(parser.id(), barrier, signal);
 
-    FifoBroadcast<Integer<unsigned>> broadcast(parser.id(), parser.hosts(),
-                                              [](const Integer<unsigned> &msg, unsigned long src) {
-                                                  std::cout << "Got message <" << msg.val_
-                                                            << "> from source " << src << std::endl;
-                                              });
+    Broadcaster broadcast(parser.id(), parser.hosts(), parser.configPath(), parser.outputPath());
     broadcaster = &broadcast;
 
     std::cout << "Waiting for all processes to finish initialization\n\n";
     coordinator.waitOnBarrier();
 
     std::cout << "Broadcasting messages...\n\n";
-    for (unsigned i = 0; i < 200000; i++) {
-        Integer<unsigned> msg(i);
-        //std::cout << "PlDataPacket{" << msg.id << ", " << msg.payload.val_ << "} size: " << sizeof(msg) << std::endl;
-        broadcast.fifoBroadcast(msg);
-    }
+    broadcast.broadcast();
 
     std::cout << "Signaling end of broadcasting messages\n\n";
     coordinator.finishedBroadcasting();

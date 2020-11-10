@@ -24,47 +24,39 @@ public:
     explicit UrbReceptionStore(unsigned long numHosts) : numHosts(numHosts) {}
 
     // Returns a couple (isNew, canDeliver)
-    std::pair<bool, bool> addMessage(unsigned long emitter, sequence seq, unsigned long src);
+    std::pair<bool, bool> addMessage(unsigned long emitter, sequence seq, unsigned long src) {
+        std::lock_guard<std::mutex> lk(m);
 
-private:
-    bool unsafeIsPending(unsigned long emitter, sequence seq);
+        // if delivered -> not new & don't deliver
+        if (unsafeIsDelivered(emitter, seq))
+            return std::make_pair(false, false);
 
-    bool unsafeCanDeliver(unsigned long emitter, sequence seq);
+        // check if pending & add to ack set
+        bool isNew = !unsafeIsPending(emitter, seq);
+        ack[emitter][seq].insert(src);
 
-    bool unsafeIsDelivered(unsigned long emitter, sequence seq);
-};
+        // check if can deliver & deliver if applicable
+        bool canDeliver = unsafeCanDeliver(emitter, seq);
+        if (canDeliver) {
+            ack[emitter].erase(seq);
+            delivered[emitter].add(seq);
+        }
 
-std::pair<bool, bool> UrbReceptionStore::addMessage(unsigned long emitter, sequence seq, unsigned long src) {
-    std::lock_guard<std::mutex> lk(m);
-
-    // if delivered -> not new & don't deliver
-    if (unsafeIsDelivered(emitter, seq))
-        return std::make_pair(false, false);
-
-    // check if pending & add to ack set
-    bool isNew = !unsafeIsPending(emitter, seq);
-    ack[emitter][seq].insert(src);
-
-    // check if can deliver & deliver if applicable
-    bool canDeliver = unsafeCanDeliver(emitter, seq);
-    if(canDeliver) {
-        ack[emitter].erase(seq);
-        delivered[emitter].add(seq);
+        return std::make_pair(isNew, canDeliver);
     }
 
-    return std::make_pair(isNew, canDeliver);
-}
+private:
+    bool unsafeIsPending(unsigned long emitter, sequence seq) {
+        return ack.count(emitter) > 0 && ack[emitter].count(seq) > 0;
+    }
 
-bool UrbReceptionStore::unsafeIsPending(unsigned long emitter, sequence seq) {
-    return ack.count(emitter) > 0 && ack[emitter].count(seq) > 0;
-}
+    bool unsafeCanDeliver(unsigned long emitter, sequence seq) {
+        return unsafeIsPending(emitter, seq) && ack[emitter][seq].size() > numHosts / 2;
+    }
 
-bool UrbReceptionStore::unsafeCanDeliver(unsigned long emitter, sequence seq) {
-    return unsafeIsPending(emitter, seq) && ack[emitter][seq].size() > numHosts / 2;
-}
-
-bool UrbReceptionStore::unsafeIsDelivered(unsigned long emitter, sequence seq) {
-    return delivered[emitter].contains(seq);
-}
+    bool unsafeIsDelivered(unsigned long emitter, sequence seq) {
+        return delivered[emitter].contains(seq);
+    }
+};
 
 #endif //DA_PROJECT_URBRECEPTIONSTORE_HPP
