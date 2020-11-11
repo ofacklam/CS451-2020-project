@@ -19,7 +19,9 @@ Broadcaster::Broadcaster(unsigned long id, const std::vector<Parser::Host> &host
 void Broadcaster::broadcast() {
     // Broadcast all messages
     for (sequence s = 1; s <= numMessages; s++) {
-        log << "b " << s << std::endl;
+        std::ostringstream tmp;
+        tmp << "b " << s << std::endl;
+        log << tmp.str();
         fifo.fifoBroadcast(Integer(s));
     }
 
@@ -38,7 +40,9 @@ void Broadcaster::writeOutput() {
 
 void Broadcaster::deliver(Integer<sequence> msg, unsigned long src) {
     // Write to output
-    log << "d " << src << " " << msg.val_ << std::endl;
+    std::ostringstream tmp;
+    tmp << "d " << src << " " << msg.val_ << std::endl;
+    log << tmp.str();
 
     if(src == ownID) {
         std::lock_guard<std::mutex> lk(m);
