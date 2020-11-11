@@ -62,12 +62,11 @@ protected:
     void waitForStop() override;
 };
 
-// Info about function binding from https://stackoverflow.com/a/45525074
 template<class T>
 PerfectLink<T>::PerfectLink(unsigned long id, const std::vector<Parser::Host> &hosts,
                             const std::function<void(T, unsigned long)> &pDeliver,
                             unsigned int numWorkers)
-        : flLink(id, hosts, std::bind(&PerfectLink::flDeliver, this, _1, _2)),
+        : flLink(id, hosts, [this](auto &&msg, auto &&src) { flDeliver(msg, src); }),
           pDeliver(pDeliver),
           senders(numWorkers * hosts.size()), deliverer(&PerfectLink::deliverLoop, this) {
     // Set up sequence numbers

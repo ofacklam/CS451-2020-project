@@ -54,7 +54,7 @@ public:
     void writeOutput();
 
 private:
-    void deliver(Integer<sequence> msg, unsigned long src);
+    void deliver(const Integer<sequence>& msg, unsigned long src);
 
 protected:
     void waitForStop() override;

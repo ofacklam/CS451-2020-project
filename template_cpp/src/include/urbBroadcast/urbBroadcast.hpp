@@ -58,7 +58,7 @@ template<class T>
 UrbBroadcast<T>::UrbBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
                               const std::function<void(T, unsigned long, sequence)> &urbDeliver,
                               unsigned long long capacity)
-        : beb(id, hosts, std::bind(&UrbBroadcast::bebDeliver, this, false, _1, _2)), ownID(id),
+        : beb(id, hosts, [this](auto &&msg, auto &&src) { return bebDeliver(false, msg, src); }), ownID(id),
           nextID(0), appQueue(capacity), internalQueue(0),
           receptionStore(hosts.size()), urbDeliver(urbDeliver),
           prioritySender(&UrbBroadcast::sendLoop, this) {}

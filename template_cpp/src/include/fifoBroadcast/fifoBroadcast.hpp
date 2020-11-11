@@ -40,12 +40,12 @@ template<class T>
 FifoBroadcast<T>::FifoBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
                                 const std::function<void(T, unsigned long)> &fifoDeliver,
                                 unsigned long long int capacity)
-        : urb(id, hosts, std::bind(&FifoBroadcast::urbDeliver, this, _1, _2, _3), capacity) {
+        : urb(id, hosts, [this](auto &&msg, auto &&src, auto &&seq) { return urbDeliver(msg, src, seq); }, capacity) {
     // Initialize reception stores
     for (auto &h: hosts) {
         receptionStores.emplace(std::piecewise_construct, // https://stackoverflow.com/a/33423214
                                 std::make_tuple(h.id),
-                                std::make_tuple(std::bind(fifoDeliver, _1, h.id)));
+                                std::make_tuple([fifoDeliver, h](auto &&msg) { return fifoDeliver(msg, h.id); }));
     }
 }
 

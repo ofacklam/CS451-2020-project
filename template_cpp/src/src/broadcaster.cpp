@@ -38,7 +38,7 @@ void Broadcaster::writeOutput() {
     log.str("");
 }
 
-void Broadcaster::deliver(Integer<sequence> msg, unsigned long src) {
+void Broadcaster::deliver(const Integer<sequence>& msg, unsigned long src) {
     // Write to output
     std::ostringstream tmp;
     tmp << "d " << src << " " << msg.val_ << std::endl;
