@@ -8,14 +8,12 @@ import tempfile
 import threading, subprocess
 import barrier, finishedSignal
 
-
 import signal
 import random
 import time
 from enum import Enum
 
 from collections import defaultdict, OrderedDict
-
 
 BARRIER_IP = 'localhost'
 BARRIER_PORT = 10000
@@ -25,17 +23,19 @@ SIGNAL_PORT = 11000
 
 PROCESSES_BASE_IP = 11000
 
+
 # Do not run multiple validations concurrently!
 
 class TC:
-    def __init__(self, losses, interface="lo", needSudo=True, sudoPassword="dcl"):
+    def __init__(self, losses, interface="lo", needSudo=False, sudoPassword="dcl"):
         self.losses = losses
         self.interface = interface
         self.needSudo = needSudo
         self.sudoPassword = sudoPassword
 
         cmd1 = 'tc qdisc add dev {} root netem 2>/dev/null'.format(self.interface)
-        cmd2 = 'tc qdisc change dev {} root netem delay {} {} distribution normal loss {} {} reorder {} {}'.format(self.interface, *self.losses['delay'], *self.losses['loss'], *self.losses['reordering'])
+        cmd2 = 'tc qdisc change dev {} root netem delay {} {} distribution normal loss {} {} reorder {} {}'.format(
+            self.interface, *self.losses['delay'], *self.losses['loss'], *self.losses['reordering'])
 
         if self.needSudo:
             os.system("echo {} | sudo -S {}".format(self.sudoPassword, cmd1))
@@ -53,10 +53,10 @@ class TC:
           Delay: {} {}
           Loss: {} {}
           Reordering: {} {}""".format(
-              self.interface,
-              *self.losses['delay'],
-              *self.losses['loss'],
-              *self.losses['reordering'])
+            self.interface,
+            *self.losses['delay'],
+            *self.losses['loss'],
+            *self.losses['reordering'])
 
         return textwrap.dedent(ret)
 
@@ -67,10 +67,12 @@ class TC:
         else:
             os.system(cmd)
 
+
 class ProcessState(Enum):
     RUNNING = 1
     STOPPED = 2
     TERMINATED = 3
+
 
 class ProcessInfo:
     def __init__(self, handle):
@@ -113,6 +115,7 @@ class ProcessInfo:
 
         return False
 
+
 class AtomicSaturatedCounter:
     def __init__(self, saturation, initial=0):
         self._saturation = saturation
@@ -127,6 +130,7 @@ class AtomicSaturatedCounter:
             else:
                 return False
 
+
 class Validation:
     def __init__(self, processes, messages, outputDir):
         self.processes = processes
@@ -139,21 +143,36 @@ class Validation:
         # Implement on the derived classes
         pass
 
-    def checkProcess(self, pid):
+    def checkProcess(self, pid, correct):
         # Implement on the derived classes
         pass
 
-    def checkAll(self, continueOnError=True):
+    def checkAgreement(self, sent, delivered, correct):
+        # Implement on the derived class
+        pass
+
+    def checkAll(self, correct, continueOnError=True):
         ok = True
-        for pid in range(1, self.processes+1):
-            ret = self.checkProcess(pid)
+        sent = {}
+        delivered = {}
+        for pid in range(1, self.processes + 1):
+            ret, s, d = self.checkProcess(pid, pid in correct)
             if not ret:
                 ok = False
 
             if not ret and not continueOnError:
                 return False
 
+            sent[pid] = s
+            delivered[pid] = d
+
+        if ok:
+            ret = self.checkAgreement(sent, delivered, correct)
+            if not ret:
+                ok = False
+
         return ok
+
 
 class FifoBroadcastValidation(Validation):
     def generateConfig(self):
@@ -161,7 +180,7 @@ class FifoBroadcastValidation(Validation):
         config = tempfile.NamedTemporaryFile(mode='w')
 
         for i in range(1, self.processes + 1):
-            hosts.write("{} localhost {}\n".format(i, PROCESSES_BASE_IP+i))
+            hosts.write("{} localhost {}\n".format(i, PROCESSES_BASE_IP + i))
 
         hosts.flush()
 
@@ -170,36 +189,73 @@ class FifoBroadcastValidation(Validation):
 
         return (hosts, config)
 
-    def checkProcess(self, pid):
+    def checkProcess(self, pid, correct):
         filePath = os.path.join(self.outputDirPath, 'proc{:02d}.output'.format(pid))
 
         i = 1
-        nextMessage = defaultdict(lambda : 1)
+        nextMessage = defaultdict(lambda: 1)
         filename = os.path.basename(filePath)
 
         with open(filePath) as f:
             for lineNumber, line in enumerate(f):
                 tokens = line.split()
 
-                # Check broadcast
+                # Check broadcast (FIFO)
                 if tokens[0] == 'b':
                     msg = int(tokens[1])
                     if msg != i:
-                        print("File {}, Line {}: Messages broadcast out of order. Expected message {} but broadcast message {}".format(filename, lineNumber, i, msg))
-                        return False
+                        print("File {}, Line {}: Messages broadcast out of order. Expected message {} but broadcast message {}".format(
+                            filename, lineNumber, i, msg))
+                        return False, i, nextMessage
                     i += 1
 
-                # Check delivery
+                # Check delivery (FIFO & no duplication)
                 if tokens[0] == 'd':
                     sender = int(tokens[1])
                     msg = int(tokens[2])
+                    if sender == pid and msg >= i:
+                        print("File {}, Line {}: Message {} delivered before it was broadcast".format(filename, lineNumber, msg))
+                        return False, i, nextMessage
                     if msg != nextMessage[sender]:
-                        print("File {}, Line {}: Message delivered out of order. Expected message {}, but delivered message {}".format(filename, lineNumber, nextMessage[sender], msg))
-                        return False
+                        print("File {}, Line {}: Message delivered out of order. Expected message {}, but delivered message {}".format(
+                            filename, lineNumber, nextMessage[sender], msg))
+                        return False, i, nextMessage
                     else:
                         nextMessage[sender] = msg + 1
 
+        # Broadcast (completeness)
+        if correct and i - 1 != self.messages:
+            print("File {}: Correct process {} broadcast {} messages, {} expected".format(filename, pid, i - 1, self.messages))
+            return False, i, nextMessage
+
+        # URB Validity
+        if correct and nextMessage[pid] != i:
+            print("File {}: Correct process {} broadcast {} messages, but delivered {} messages".format(filename, pid, i - 1, nextMessage[pid] - 1))
+            return False, i, nextMessage
+
+        return True, i, nextMessage
+
+    def checkAgreement(self, sent, delivered, correct):
+        # No creation
+        for sender in range(1, self.processes + 1):
+            for receiver in range(1, self.processes + 1):
+                d = delivered[receiver][sender]
+                s = sent[sender]
+                if d > s:
+                    print("Process {} delivered {} messages from process {}, while only {} were broadcast".format(receiver, d, sender, s))
+                    return False
+
+        # Uniform agreement
+        for sender in range(1, self.processes + 1):
+            highestReceived = max([delivered[p][sender] for p in range(1, self.processes + 1)])
+            for p in correct:
+                if delivered[p][sender] < highestReceived:
+                    print("Correct process {} did not deliver message {} from {} which was delivered by some process".format(
+                        p, highestReceived - 1, sender))
+                    return False
+
         return True
+
 
 class LCausalBroadcastValidation(Validation):
     def __init__(self, processes, outputDir, causalRelationships):
@@ -208,8 +264,9 @@ class LCausalBroadcastValidation(Validation):
     def generateConfig(self):
         raise NotImplementedError()
 
-    def checkProcess(self, pid):
+    def checkProcess(self, pid, correct):
         raise NotImplementedError()
+
 
 class StressTest:
     def __init__(self, procs, concurrency, attempts, attemptsRatio):
@@ -225,12 +282,12 @@ class StressTest:
         self.terminatedProcs = AtomicSaturatedCounter(maxTerminatedProcesses)
 
     def stress(self):
-        selectProc = list(range(1, self.processes+1))
+        selectProc = list(range(1, self.processes + 1))
         random.shuffle(selectProc)
 
         selectOp = [ProcessState.STOPPED] * int(1000 * self.attemptsRatio['STOP']) + \
-                    [ProcessState.RUNNING] * int(1000 * self.attemptsRatio['CONT']) + \
-                    [ProcessState.TERMINATED] * int(1000 * self.attemptsRatio['TERM'])
+                   [ProcessState.RUNNING] * int(1000 * self.attemptsRatio['CONT']) + \
+                   [ProcessState.TERMINATED] * int(1000 * self.attemptsRatio['TERM'])
         random.shuffle(selectOp)
 
         successfulAttempts = 0
@@ -298,6 +355,7 @@ class StressTest:
         else:
             self.stress()
 
+
 def startProcesses(processes, runscript, hostsFilePath, configFilePath, outputDir):
     runscriptPath = os.path.abspath(runscript)
     if not os.path.isfile(runscriptPath):
@@ -322,7 +380,7 @@ def startProcesses(processes, runscript, hostsFilePath, configFilePath, outputDi
         raise Exception("`{}` could not find a binary to execute. Make sure you build before validating".format(runscriptPath))
 
     procs = []
-    for pid in range(1, processes+1):
+    for pid in range(1, processes + 1):
         cmd_ext = ['--id', str(pid),
                    '--hosts', hostsFilePath,
                    '--barrier', '{}:{}'.format(BARRIER_IP, BARRIER_PORT),
@@ -333,10 +391,10 @@ def startProcesses(processes, runscript, hostsFilePath, configFilePath, outputDi
         stdoutFd = open(os.path.join(outputDirPath, 'proc{:02d}.stdout'.format(pid)), "w")
         stderrFd = open(os.path.join(outputDirPath, 'proc{:02d}.stderr'.format(pid)), "w")
 
-
         procs.append((pid, subprocess.Popen(cmd + cmd_ext, stdout=stdoutFd, stderr=stderrFd)))
 
     return procs
+
 
 def main(processes, messages, runscript, broadcastType, logsDir, testConfig):
     # Set tc for loopback
@@ -377,13 +435,11 @@ def main(processes, messages, runscript, broadcastType, logsDir, testConfig):
         for (logicalPID, procHandle) in procs:
             print("Process with logicalPID {} has PID {}".format(logicalPID, procHandle.pid))
 
-
         initBarrierThread.join()
         print("All processes have been initialized.")
 
         st.run()
         print("StressTest is complete.")
-
 
         print("Resuming stopped processes.")
         st.continueStoppedProcesses()
@@ -413,12 +469,13 @@ def main(processes, messages, runscript, broadcastType, logsDir, testConfig):
         [p.join() for p in monitors]
 
         input('Hit `Enter` to validate the output')
-        print("Result of validation: {}".format(validation.checkAll()))
+        print("Result of validation: {}".format(validation.checkAll(unterminated)))
 
     finally:
         if procs is not None:
             for _, p in procs:
                 p.kill()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -478,12 +535,12 @@ if __name__ == "__main__":
 
         # StressTest configuration
         'ST': {
-            'concurrency' : 8, # How many threads are interferring with the running processes
-            'attempts' : 8, # How many interferring attempts each threads does
-            'attemptsDistribution' : { # Probability with which an interferring thread will
-                'STOP': 0.48,          # select an interferring action (make sure they add up to 1)
+            'concurrency': 8,  # How many threads are interferring with the running processes
+            'attempts': 8,  # How many interferring attempts each threads does
+            'attemptsDistribution': {  # Probability with which an interferring thread will
+                'STOP': 0.48,  # select an interferring action (make sure they add up to 1)
                 'CONT': 0.48,
-                'TERM':0.04
+                'TERM': 0.04
             }
         }
     }
