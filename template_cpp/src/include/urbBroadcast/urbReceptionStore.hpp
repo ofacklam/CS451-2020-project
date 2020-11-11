@@ -8,7 +8,7 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "../perfectLink/sequenceNumberStore.hpp"
+#include "utils/sequenceNumberStore.hpp"
 
 
 class UrbReceptionStore {

@@ -11,9 +11,9 @@
 #include <netdb.h>
 #include <unordered_map>
 
-#include "../stoppable.hpp"
-#include "serializable.hpp"
-#include "../utils.hpp"
+#include "utils/stoppable.hpp"
+#include "utils/serializable.hpp"
+#include "utils/utils.hpp"
 
 
 /**

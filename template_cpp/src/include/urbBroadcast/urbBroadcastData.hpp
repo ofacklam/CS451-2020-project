@@ -5,9 +5,9 @@
 #ifndef DA_PROJECT_URBBROADCASTDATA_HPP
 #define DA_PROJECT_URBBROADCASTDATA_HPP
 
-#include "../fairLossLink/serializable.hpp"
-#include "../perfectLink/sequenceNumberStore.hpp"
-#include "../utils.hpp"
+#include "utils/serializable.hpp"
+#include "utils/sequenceNumberStore.hpp"
+#include "utils/utils.hpp"
 
 
 /**

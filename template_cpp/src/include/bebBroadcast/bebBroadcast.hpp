@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "../stoppable.hpp"
-#include "../perfectLink/perfectLink.hpp"
+#include "utils/stoppable.hpp"
+#include "perfectLink/perfectLink.hpp"
 
 
 /**

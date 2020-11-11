@@ -7,9 +7,9 @@
 
 #include <mutex>
 
-#include "../stoppable.hpp"
+#include "utils/stoppable.hpp"
 #include "fifoReceptionStore.hpp"
-#include "../urbBroadcast/urbBroadcast.hpp"
+#include "urbBroadcast/urbBroadcast.hpp"
 
 
 template<class T>

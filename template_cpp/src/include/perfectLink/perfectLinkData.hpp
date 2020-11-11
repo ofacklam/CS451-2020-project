@@ -7,8 +7,8 @@
 
 #include <iostream>
 
-#include "../fairLossLink/serializable.hpp"
-#include "sequenceNumberStore.hpp"
+#include "utils/serializable.hpp"
+#include "utils/sequenceNumberStore.hpp"
 
 
 template<class T>

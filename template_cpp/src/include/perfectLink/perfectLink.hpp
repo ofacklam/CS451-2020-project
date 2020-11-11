@@ -5,17 +5,17 @@
 #ifndef DA_PROJECT_PERFECTLINK_HPP
 #define DA_PROJECT_PERFECTLINK_HPP
 
-
 #include <functional>
 #include <vector>
 
-#include "stoppable.hpp"
+#include "utils/stoppable.hpp"
 #include "fairLossLink/fairLossLink.hpp"
 #include "perfectLinkData.hpp"
-#include "synchronizedQueue.hpp"
-#include "sequenceNumberStore.hpp"
+#include "utils/synchronizedQueue.hpp"
+#include "utils/sequenceNumberStore.hpp"
 
 using namespace std::placeholders;
+
 
 /**
  * Implementation of the perfect link interface, on top of UDP

@@ -10,7 +10,7 @@
 #include <functional>
 #include <iostream>
 
-#include "../perfectLink/sequenceNumberStore.hpp"
+#include "utils/sequenceNumberStore.hpp"
 
 
 template<class T>
