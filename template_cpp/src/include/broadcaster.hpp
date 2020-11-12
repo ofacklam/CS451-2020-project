@@ -31,6 +31,7 @@ private:
     // Config info
     unsigned long long numMessages = 0;
     std::ostringstream log;
+    std::mutex mLog;
     std::string outputPath;
 
     // Broadcasting abstraction
@@ -39,7 +40,7 @@ private:
     // Reception --> for timing end of broadcast
     unsigned long ownID;
     unsigned long long numOwnDelivered = 0;
-    std::mutex m;
+    std::mutex mNumDelivered;
     std::condition_variable cv;
 
 public:

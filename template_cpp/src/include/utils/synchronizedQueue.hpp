@@ -20,7 +20,7 @@ template<class T>
 class SynchronizedQueue {
 private:
     std::mutex m;
-    std::condition_variable c;
+    std::condition_variable cvWriter, cvReader;
     std::queue<T> q;
     unsigned long long capacity;
 
@@ -32,20 +32,20 @@ public:
     void enqueue(T elem) {
         // Wait for queue to have sufficient capacity
         std::unique_lock<std::mutex> lk(m);
-        c.wait(lk, [this] { return capacity == 0 || q.size() < capacity; });
+        cvWriter.wait(lk, [this] { return capacity == 0 || q.size() < capacity; });
 
         // Enqueue
         q.push(elem);
 
         // Notify
         lk.unlock();
-        c.notify_all();
+        cvReader.notify_one();
     }
 
     bool dequeue(T *val, unsigned ms) {
         // Wait for queue to be non-empty
         std::unique_lock<std::mutex> lk(m);
-        bool success = c.wait_for(lk, ms * 1ms, [this] { return !q.empty(); });
+        bool success = cvReader.wait_for(lk, ms * 1ms, [this] { return !q.empty(); });
         if (!success)
             return false;
 
@@ -55,7 +55,7 @@ public:
 
         // Notify
         lk.unlock();
-        c.notify_all();
+        cvWriter.notify_one();
 
         return true;
     }

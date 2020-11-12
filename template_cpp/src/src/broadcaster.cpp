@@ -19,18 +19,21 @@ Broadcaster::Broadcaster(unsigned long id, const std::vector<Parser::Host> &host
 void Broadcaster::broadcast() {
     // Broadcast all messages
     for (sequence s = 1; s <= numMessages; s++) {
-        std::ostringstream tmp;
-        tmp << "b " << s << std::endl;
-        log << tmp.str();
+        {
+            std::lock_guard<std::mutex> lk(mLog);
+            log << "b " << s << std::endl;
+        }
         fifo.fifoBroadcast(Integer(s));
     }
 
     // Wait for finish
-    std::unique_lock<std::mutex> lk(m);
+    std::unique_lock<std::mutex> lk(mNumDelivered);
     cv.wait(lk, [this] { return numOwnDelivered == numMessages; });
 }
 
 void Broadcaster::writeOutput() {
+    std::lock_guard<std::mutex> lk(mLog);
+
     std::ofstream out(outputPath);
     out << log.str();
     out.flush();
@@ -40,12 +43,13 @@ void Broadcaster::writeOutput() {
 
 void Broadcaster::deliver(const Integer<sequence>& msg, unsigned long src) {
     // Write to output
-    std::ostringstream tmp;
-    tmp << "d " << src << " " << msg.val_ << std::endl;
-    log << tmp.str();
+    {
+        std::lock_guard<std::mutex> lk(mLog);
+        log << "d " << src << " " << msg.val_ << std::endl;
+    }
 
     if(src == ownID) {
-        std::lock_guard<std::mutex> lk(m);
+        std::lock_guard<std::mutex> lk(mNumDelivered);
         numOwnDelivered++;
         cv.notify_one();
     }
