@@ -71,8 +71,13 @@ PerfectLink<T>::PerfectLink(unsigned long id, const std::vector<Parser::Host> &h
           pDeliver(pDeliver),
           senders(numWorkers), deliverer(&PerfectLink::deliverLoop, this) {
     // Set up sequence numbers
-    for (auto &h: hosts)
+    for (auto &h: hosts) {
         nextIDs[h.id] = 0;
+        // Default-construct following values
+        sendQueues[h.id];
+        storeACKed[h.id];
+        storeDelivered[h.id];
+    }
 
     // Set up workers
     for (auto &s: senders)
@@ -93,7 +98,7 @@ void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
     // Set up timings
     auto retryTime = 100ms;
     auto granularity = 200us;
-    auto maxPending = 1000ul;
+    auto maxPending = 500ul;
     unsigned long maxPendingPerDest = maxPending / hosts.size();
 
     // Internal pending set for the send loop
@@ -103,28 +108,33 @@ void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
 
     while (!shouldStop()) {
         auto dst = currentDest->id;
-        auto &currentQueue = pending[dst];
+        std::queue<PlDataPacket<T>> &currentQueue = pending[dst];
+        std::queue<PlDataPacket<T>> newQueue;
 
-        // Send pending packet if applicable
-        if (!currentQueue.empty()) {
+        // Send pending packets if applicable
+        while (!currentQueue.empty() && !shouldStop()) {
             auto msg = currentQueue.front();
             currentQueue.pop();
             if (!storeACKed[dst].contains(msg.id)) {
                 flLink.flSend(msg, dst);
-                currentQueue.push(msg);
+                newQueue.push(msg);
             }
         }
 
+        if (shouldStop())
+            break;
+
         // Try to get new packets
         bool success = true;
-        while (currentQueue.size() < maxPendingPerDest && success) {
+        while (newQueue.size() < maxPendingPerDest && success) {
             PlDataPacket<T> msg{};
             success = sendQueues[dst].dequeue(&msg, 0);
             if (success)
-                currentQueue.push(msg);
+                newQueue.push(msg);
         }
 
         // Update pointers
+        pending[dst] = newQueue;
         currentDest++;
         if (currentDest == hosts.end()) {
             currentDest = hosts.begin();
