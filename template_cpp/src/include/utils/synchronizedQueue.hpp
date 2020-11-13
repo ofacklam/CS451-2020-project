@@ -45,7 +45,11 @@ public:
     bool dequeue(T *val, unsigned ms) {
         // Wait for queue to be non-empty
         std::unique_lock<std::mutex> lk(m);
-        bool success = cvReader.wait_for(lk, ms * 1ms, [this] { return !q.empty(); });
+        bool success;
+        if (ms == 0)
+            success = !q.empty();
+        else
+            success = cvReader.wait_for(lk, ms * 1ms, [this] { return !q.empty(); });
         if (!success)
             return false;
 

@@ -92,13 +92,14 @@ template<class T>
 void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
     // Set up timings
     auto retryTime = 100ms;
-    auto granularity = 100us;
-    auto maxPending = static_cast<unsigned long>(retryTime / granularity);
+    auto granularity = 200us;
+    auto maxPending = 1000ul;
     unsigned long maxPendingPerDest = maxPending / hosts.size();
 
     // Internal pending set for the send loop
     std::unordered_map<unsigned long, std::queue<PlDataPacket<T>>> pending;
     auto currentDest = hosts.begin();
+    auto nextWakeup = std::chrono::high_resolution_clock::now() + retryTime;
 
     while (!shouldStop()) {
         auto dst = currentDest->id;
@@ -125,10 +126,11 @@ void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
 
         // Update pointers
         currentDest++;
-        if (currentDest == hosts.end())
+        if (currentDest == hosts.end()) {
             currentDest = hosts.begin();
-
-        std::this_thread::sleep_for(granularity);
+            std::this_thread::sleep_until(nextWakeup);
+            nextWakeup = std::chrono::high_resolution_clock::now() + retryTime;
+        }
     }
 }
 
@@ -155,7 +157,7 @@ void PerfectLink<T>::deliverLoop() {
     while (!shouldStop()) {
         // Get next packet to deliver
         std::pair<T, unsigned long> pkt{};
-        bool success = deliverQueue.dequeue(&pkt, 100);
+        bool success = deliverQueue.dequeue(&pkt, 1000);
 
         if (shouldStop())
             break;
