@@ -7,6 +7,7 @@
 
 #include <functional>
 #include <vector>
+#include <unordered_map>
 
 #include "utils/stoppable.hpp"
 #include "fairLossLink/fairLossLink.hpp"
@@ -47,12 +48,12 @@ public:
     PerfectLink(unsigned long id,
                 const std::vector<Parser::Host> &hosts,
                 const std::function<void(T, unsigned long)> &pDeliver,
-                unsigned numWorkers = 10);
+                unsigned long numWorkers = 10);
 
     void pSend(T payload, unsigned long dst);
 
 private:
-    void sendLoop(unsigned long dst);
+    void sendLoop(const std::vector<Parser::Host> &hosts);
 
     void flDeliver(PlDataPacket<T> dp, unsigned long src);
 
@@ -65,20 +66,17 @@ protected:
 template<class T>
 PerfectLink<T>::PerfectLink(unsigned long id, const std::vector<Parser::Host> &hosts,
                             const std::function<void(T, unsigned long)> &pDeliver,
-                            unsigned int numWorkers)
+                            unsigned long numWorkers)
         : flLink(id, hosts, [this](auto &&msg, auto &&src) { flDeliver(msg, src); }),
           pDeliver(pDeliver),
-          senders(numWorkers * hosts.size()), deliverer(&PerfectLink::deliverLoop, this) {
+          senders(numWorkers), deliverer(&PerfectLink::deliverLoop, this) {
     // Set up sequence numbers
     for (auto &h: hosts)
         nextIDs[h.id] = 0;
 
     // Set up workers
-    for (unsigned i = 0; i < hosts.size(); i++) {
-        for (unsigned j = 0; j < numWorkers; j++) {
-            senders[i * numWorkers + j] = std::thread(&PerfectLink::sendLoop, this, hosts[i].id);
-        }
-    }
+    for (auto &s: senders)
+        s = std::thread(&PerfectLink::sendLoop, this, hosts);
 }
 
 template<class T>
@@ -91,22 +89,46 @@ void PerfectLink<T>::pSend(T payload, unsigned long dst) {
 }
 
 template<class T>
-void PerfectLink<T>::sendLoop(unsigned long dst) {
+void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
+    // Set up timings
+    auto retryTime = 100ms;
+    auto granularity = 100us;
+    auto maxPending = static_cast<unsigned long>(retryTime / granularity);
+    unsigned long maxPendingPerDest = maxPending / hosts.size();
+
+    // Internal pending set for the send loop
+    std::unordered_map<unsigned long, std::queue<PlDataPacket<T>>> pending;
+    auto currentDest = hosts.begin();
+
     while (!shouldStop()) {
-        // Get next packet to send
-        PlDataPacket<T> msg{};
-        bool success = sendQueues[dst].dequeue(&msg, 100);
+        auto dst = currentDest->id;
+        auto &currentQueue = pending[dst];
 
-        if (shouldStop())
-            break;
-
-        if (success) {
-            // Send the packet, at regular intervals
-            while (!storeACKed[dst].contains(msg.id) && !shouldStop()) {
+        // Send pending packet if applicable
+        if (!currentQueue.empty()) {
+            auto msg = currentQueue.front();
+            currentQueue.pop();
+            if (!storeACKed[dst].contains(msg.id)) {
                 flLink.flSend(msg, dst);
-                std::this_thread::sleep_for(100ms);
+                currentQueue.push(msg);
             }
         }
+
+        // Try to get new packets
+        bool success = true;
+        while (currentQueue.size() < maxPendingPerDest && success) {
+            PlDataPacket<T> msg{};
+            success = sendQueues[dst].dequeue(&msg, 0);
+            if (success)
+                currentQueue.push(msg);
+        }
+
+        // Update pointers
+        currentDest++;
+        if (currentDest == hosts.end())
+            currentDest = hosts.begin();
+
+        std::this_thread::sleep_for(granularity);
     }
 }
 
