@@ -100,7 +100,7 @@ void PerfectLink<T>::sendLoop(unsigned long dst) {
     while (!shouldStop()) {
         // Get next packet to send
         PlDataPacket<T> msg{};
-        bool success = sendQueues[dst].dequeue(&msg, 100);
+        bool success = sendQueues[dst].dequeue(&msg, 1000);
 
         if (shouldStop())
             break;
