@@ -47,7 +47,7 @@ public:
     PerfectLink(unsigned long id,
                 const std::vector<Parser::Host> &hosts,
                 const std::function<void(T, unsigned long)> &pDeliver,
-                unsigned numWorkers = 10);
+                unsigned long numWorkers = 1);
 
     void pSend(T payload, unsigned long dst);
 
@@ -65,13 +65,18 @@ protected:
 template<class T>
 PerfectLink<T>::PerfectLink(unsigned long id, const std::vector<Parser::Host> &hosts,
                             const std::function<void(T, unsigned long)> &pDeliver,
-                            unsigned int numWorkers)
+                            unsigned long numWorkers)
         : flLink(id, hosts, [this](auto &&msg, auto &&src) { flDeliver(msg, src); }),
           pDeliver(pDeliver),
           senders(numWorkers * hosts.size()), deliverer(&PerfectLink::deliverLoop, this) {
     // Set up sequence numbers
-    for (auto &h: hosts)
+    for (auto &h: hosts) {
         nextIDs[h.id] = 0;
+        // Default-construct following values
+        sendQueues[h.id];
+        storeACKed[h.id];
+        storeDelivered[h.id];
+    }
 
     // Set up workers
     for (unsigned i = 0; i < hosts.size(); i++) {
@@ -133,7 +138,7 @@ void PerfectLink<T>::deliverLoop() {
     while (!shouldStop()) {
         // Get next packet to deliver
         std::pair<T, unsigned long> pkt{};
-        bool success = deliverQueue.dequeue(&pkt, 100);
+        bool success = deliverQueue.dequeue(&pkt, 1000);
 
         if (shouldStop())
             break;

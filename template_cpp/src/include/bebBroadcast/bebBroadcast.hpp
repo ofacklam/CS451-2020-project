@@ -10,6 +10,8 @@
 #include "utils/stoppable.hpp"
 #include "perfectLink/perfectLink.hpp"
 
+#define MAX_THREADS 128*128ul
+
 
 /**
  * Implementation of best-effort broadcast interface
@@ -35,12 +37,12 @@ protected:
 template<class T>
 BebBroadcast<T>::BebBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
                               const std::function<void(T, unsigned long)> &bebDeliver)
-        : hosts(hosts), pLink(id, hosts, bebDeliver) {}
+        : hosts(hosts), pLink(id, hosts, bebDeliver, MAX_THREADS / (hosts.size() * hosts.size())) {}
 
 template<class T>
 void BebBroadcast<T>::bebBroadcast(T msg) {
     for (auto &h: hosts) {
-        if(shouldStop())
+        if (shouldStop())
             return;
         pLink.pSend(msg, h.id);
     }

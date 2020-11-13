@@ -97,11 +97,11 @@ void UrbBroadcast<T>::sendLoop() {
         UrbDataPacket<T> msg{};
 
         // Try getting from internalQueue (higher priority)
-        bool success = internalQueue.dequeue(&msg, 100);
+        bool success = internalQueue.dequeue(&msg, 1);
 
         // Only if internalQueue is empty, try appQueue
         if (!success)
-            success = appQueue.dequeue(&msg, 100);
+            success = appQueue.dequeue(&msg, 1);
 
         if (shouldStop())
             break;
