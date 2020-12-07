@@ -143,20 +143,101 @@ class Validation:
         # Implement on the derived classes
         pass
 
-    def checkProcess(self, pid, correct):
+    def checkAll(self, correct, continueOnError=True):
         # Implement on the derived classes
         pass
 
+
+class FifoBroadcastValidation(Validation):
+    def generateConfig(self):
+        hosts = tempfile.NamedTemporaryFile(mode='w')
+        config = tempfile.NamedTemporaryFile(mode='w')
+
+        for i in range(1, self.processes + 1):
+            hosts.write("{} localhost {}\n".format(i, PROCESSES_BASE_IP + i))
+
+        hosts.flush()
+
+        config.write("{}\n".format(self.messages))
+        config.flush()
+
+        return hosts, config
+
+    def checkProcess(self, pid, correct):
+        filePath = os.path.join(self.outputDirPath, 'proc{:02d}.output'.format(pid))
+
+        i = 1
+        vectorClock = []
+        nextMessage = defaultdict(lambda: 1)
+        filename = os.path.basename(filePath)
+
+        with open(filePath) as f:
+            for lineNumber, line in enumerate(f):
+                tokens = line.split()
+
+                # Check broadcast (FIFO)
+                if tokens[0] == 'b':
+                    msg = int(tokens[1])
+                    if msg != i:
+                        print("File {}, Line {}: Messages broadcast out of order. Expected message {} but broadcast message {}".format(filename, lineNumber, i, msg))
+                        return False, i, nextMessage, vectorClock
+                    vc = nextMessage.copy()
+                    vc[pid] = i
+                    vectorClock.append(vc)
+                    i += 1
+
+                # Check delivery (FIFO & no duplication)
+                if tokens[0] == 'd':
+                    sender = int(tokens[1])
+                    msg = int(tokens[2])
+                    if sender == pid and msg >= i:
+                        print("File {}, Line {}: Message {} delivered before it was broadcast".format(filename, lineNumber, msg))
+                        return False, i, nextMessage, vectorClock
+                    if msg != nextMessage[sender]:
+                        print("File {}, Line {}: Message delivered out of order. Expected message {}, but delivered message {}".format(
+                            filename, lineNumber, nextMessage[sender], msg))
+                        return False, i, nextMessage, vectorClock
+                    else:
+                        nextMessage[sender] = msg + 1
+
+        # Broadcast (completeness)
+        if correct and i - 1 != self.messages:
+            print("File {}: Correct process {} broadcast {} messages, {} expected".format(filename, pid, i - 1, self.messages))
+            return False, i, nextMessage, vectorClock
+
+        # URB Validity
+        if correct and nextMessage[pid] != i:
+            print("File {}: Correct process {} broadcast {} messages, but delivered {} messages".format(filename, pid, i - 1, nextMessage[pid] - 1))
+            return False, i, nextMessage, vectorClock
+
+        return True, i, nextMessage, vectorClock
+
     def checkAgreement(self, sent, delivered, correct):
-        # Implement on the derived class
-        pass
+        # No creation
+        for sender in range(1, self.processes + 1):
+            for receiver in range(1, self.processes + 1):
+                d = delivered[receiver][sender]
+                s = sent[sender]
+                if d > s:
+                    print("Process {} delivered {} messages from process {}, while only {} were broadcast".format(receiver, d, sender, s))
+                    return False
+
+        # Uniform agreement
+        for sender in range(1, self.processes + 1):
+            highestReceived = max([delivered[p][sender] for p in range(1, self.processes + 1)])
+            for p in correct:
+                if delivered[p][sender] < highestReceived:
+                    print("Correct process {} did not deliver message {} from {} which was delivered by some process".format(p, highestReceived - 1, sender))
+                    return False
+
+        return True
 
     def checkAll(self, correct, continueOnError=True):
         ok = True
         sent = {}
         delivered = {}
         for pid in range(1, self.processes + 1):
-            ret, s, d = self.checkProcess(pid, pid in correct)
+            ret, s, d, vcs = self.checkProcess(pid, pid in correct)
             if not ret:
                 ok = False
 
@@ -174,25 +255,37 @@ class Validation:
         return ok
 
 
-class FifoBroadcastValidation(Validation):
+class LCausalBroadcastValidation(FifoBroadcastValidation):
+    def __init__(self, processes, messages, outputDir, extraParameter):
+        super().__init__(processes, messages, outputDir)
+        # Use the `extraParameter` to pass any information you think is relevant
+        if extraParameter is not None:
+            # Use given dependencies
+            self.dependencies = extraParameter
+        else:
+            # Else create random dependencies
+            self.dependencies = {}
+            for pid in range(1, self.processes + 1):
+                allButThis = list(range(1, self.processes + 1))
+                allButThis.remove(pid)
+                self.dependencies[pid] = random.sample(allButThis, k=random.randint(0, self.processes - 1))
+        print(self.dependencies)
+
     def generateConfig(self):
-        hosts = tempfile.NamedTemporaryFile(mode='w')
-        config = tempfile.NamedTemporaryFile(mode='w')
+        hosts, config = super().generateConfig()
 
-        for i in range(1, self.processes + 1):
-            hosts.write("{} localhost {}\n".format(i, PROCESSES_BASE_IP + i))
-
-        hosts.flush()
-
-        config.write("{}\n".format(self.messages))
+        for pid in range(1, self.processes + 1):
+            config.write("{} ".format(pid))
+            for dep in self.dependencies[pid]:
+                config.write("{} ".format(dep))
+            config.write("\n")
         config.flush()
 
-        return (hosts, config)
+        return hosts, config
 
-    def checkProcess(self, pid, correct):
+    def checkCausality(self, pid, vectorClocks):
         filePath = os.path.join(self.outputDirPath, 'proc{:02d}.output'.format(pid))
 
-        i = 1
         nextMessage = defaultdict(lambda: 1)
         filename = os.path.basename(filePath)
 
@@ -200,73 +293,63 @@ class FifoBroadcastValidation(Validation):
             for lineNumber, line in enumerate(f):
                 tokens = line.split()
 
-                # Check broadcast (FIFO)
-                if tokens[0] == 'b':
-                    msg = int(tokens[1])
-                    if msg != i:
-                        print("File {}, Line {}: Messages broadcast out of order. Expected message {} but broadcast message {}".format(
-                            filename, lineNumber, i, msg))
-                        return False, i, nextMessage
-                    i += 1
+                # Ignore broadcasts
 
-                # Check delivery (FIFO & no duplication)
+                # Check delivery (local causality)
                 if tokens[0] == 'd':
                     sender = int(tokens[1])
                     msg = int(tokens[2])
-                    if sender == pid and msg >= i:
-                        print("File {}, Line {}: Message {} delivered before it was broadcast".format(filename, lineNumber, msg))
-                        return False, i, nextMessage
+
+                    vc = vectorClocks[sender][msg - 1]
+                    # delivered messages should be greater than vector clock (for upstream processes)
+                    for other in range(1, self.processes + 1):
+                        if other in self.dependencies[sender] or other == sender:
+                            if nextMessage[other] < vc[other]:
+                                print("File {}, Line {}: Message causality not respected. Expected dependencies {} to be delivered, only got {}".format(
+                                    filename, lineNumber, vc, nextMessage))
+                                return False
+
                     if msg != nextMessage[sender]:
                         print("File {}, Line {}: Message delivered out of order. Expected message {}, but delivered message {}".format(
                             filename, lineNumber, nextMessage[sender], msg))
-                        return False, i, nextMessage
+                        return False
                     else:
                         nextMessage[sender] = msg + 1
 
-        # Broadcast (completeness)
-        if correct and i - 1 != self.messages:
-            print("File {}: Correct process {} broadcast {} messages, {} expected".format(filename, pid, i - 1, self.messages))
-            return False, i, nextMessage
-
-        # URB Validity
-        if correct and nextMessage[pid] != i:
-            print("File {}: Correct process {} broadcast {} messages, but delivered {} messages".format(filename, pid, i - 1, nextMessage[pid] - 1))
-            return False, i, nextMessage
-
-        return True, i, nextMessage
-
-    def checkAgreement(self, sent, delivered, correct):
-        # No creation
-        for sender in range(1, self.processes + 1):
-            for receiver in range(1, self.processes + 1):
-                d = delivered[receiver][sender]
-                s = sent[sender]
-                if d > s:
-                    print("Process {} delivered {} messages from process {}, while only {} were broadcast".format(receiver, d, sender, s))
-                    return False
-
-        # Uniform agreement
-        for sender in range(1, self.processes + 1):
-            highestReceived = max([delivered[p][sender] for p in range(1, self.processes + 1)])
-            for p in correct:
-                if delivered[p][sender] < highestReceived:
-                    print("Correct process {} did not deliver message {} from {} which was delivered by some process".format(
-                        p, highestReceived - 1, sender))
-                    return False
-
         return True
 
+    def checkAll(self, correct, continueOnError=True):
+        ok = True
+        sent = {}
+        delivered = {}
+        vectorClocks = {}
+        for pid in range(1, self.processes + 1):
+            ret, s, d, vcs = self.checkProcess(pid, pid in correct)
+            if not ret:
+                ok = False
 
-class LCausalBroadcastValidation(Validation):
-    def __init__(self, processes, messages, outputDir, extraParameter):
-        super().__init__(processes, messages, outputDir)
-        # Use the `extraParameter` to pass any information you think is relevant
+            if not ret and not continueOnError:
+                return False
 
-    def generateConfig(self):
-        raise NotImplementedError()
+            sent[pid] = s
+            delivered[pid] = d
+            vectorClocks[pid] = vcs
 
-    def checkProcess(self, pid, correct):
-        raise NotImplementedError()
+        if ok:
+            ret = self.checkAgreement(sent, delivered, correct)
+            if not ret:
+                ok = False
+
+        if ok:
+            for pid in range(1, self.processes + 1):
+                ret = self.checkCausality(pid, vectorClocks)
+                if not ret:
+                    ok = False
+
+                if not ret and not continueOnError:
+                    return False
+
+        return ok
 
 
 class StressTest:
