@@ -35,7 +35,7 @@ protected:
 template<class T>
 BebBroadcast<T>::BebBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
                               const std::function<void(T, unsigned long)> &bebDeliver)
-        : hosts(hosts), pLink(id, hosts, bebDeliver, 10) {}
+        : hosts(hosts), pLink(id, hosts, bebDeliver, 1) {}
 
 template<class T>
 void BebBroadcast<T>::bebBroadcast(T msg) {
