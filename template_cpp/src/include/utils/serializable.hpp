@@ -11,6 +11,11 @@
  */
 class Serializable {
 public:
+    static size_t size() {
+        return 0;
+    };
+
+public:
     virtual void serialize(std::ostream &os) = 0;
 
     virtual void deserialize(std::istream &is) = 0;

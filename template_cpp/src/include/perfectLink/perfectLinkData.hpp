@@ -14,6 +14,9 @@
 template<class T>
 class PlDataPacket : public Serializable {
 public:
+    static size_t size();
+
+public:
     sequence id;
     T payload{};
     bool isData;
@@ -28,6 +31,11 @@ public:
 
     void deserialize(std::istream &is) override;
 };
+
+template<class T>
+size_t PlDataPacket<T>::size() {
+    return sizeof(id) + T::size();
+}
 
 template<class T>
 void PlDataPacket<T>::serialize(std::ostream &os) {

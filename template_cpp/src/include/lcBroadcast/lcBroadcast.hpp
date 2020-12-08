@@ -31,7 +31,7 @@ private:
 public:
     LcBroadcast(unsigned long id,
                 const std::vector<Parser::Host> &hosts,
-                const std::function<void(T, unsigned long)> &fifoDeliver,
+                const std::function<void(T, unsigned long)> &lcDeliver,
                 unsigned long long capacity = 100);
 
     void setDependencies(std::vector<unsigned long> &deps);
@@ -47,10 +47,13 @@ protected:
 
 template<class T>
 LcBroadcast<T>::LcBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
-                            const std::function<void(T, unsigned long)> &fifoDeliver,
+                            const std::function<void(T, unsigned long)> &lcDeliver,
                             unsigned long long int capacity)
-        : urb(id, hosts, [this](auto &&msg, auto &&src, auto &&seq) { return urbDeliver(msg, src, seq); }, capacity),
-          nextID(0), ownID(id), receptionStore(fifoDeliver) {}
+        : urb(id,
+              (LcbDataPacket<T>::numTotalHosts = hosts.size(), hosts), // use comma operator (https://stackoverflow.com/a/40389624) to init host number before creating layer
+              [this](auto &&msg, auto &&src, auto &&seq) { return urbDeliver(msg, src, seq); },
+              capacity),
+          nextID(0), ownID(id), receptionStore(lcDeliver) {}
 
 template<class T>
 void LcBroadcast<T>::setDependencies(std::vector<unsigned long> &deps) {

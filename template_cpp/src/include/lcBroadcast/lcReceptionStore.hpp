@@ -40,7 +40,7 @@ private:
 
     bool unsafeCanDeliver(LcbDataPacket<T> &pkt);
 
-    void unsafeFifoDeliver(LcbDataPacket<T> msg, unsigned long src, sequence seq);
+    void unsafeLcDeliver(LcbDataPacket<T> msg, unsigned long src, sequence seq);
 
     void unsafeDeliverPending(unsigned long src, sequence expectedID);
 };
@@ -52,7 +52,7 @@ void LcReceptionStore<T>::urbDeliver(LcbDataPacket<T> msg, unsigned long src, se
     if (!unsafeCanDeliver(msg)) { // cannot deliver -> simply add to pending
         unsafeAddPending(msg, src, seq);
     } else { // can deliver -> deliver everything we can
-        unsafeFifoDeliver(msg, src, seq);
+        unsafeLcDeliver(msg, src, seq);
     }
 }
 
@@ -81,7 +81,7 @@ bool LcReceptionStore<T>::unsafeCanDeliver(LcbDataPacket<T> &pkt) {
 }
 
 template<class T>
-void LcReceptionStore<T>::unsafeFifoDeliver(LcbDataPacket<T> msg, unsigned long src, sequence seq) {
+void LcReceptionStore<T>::unsafeLcDeliver(LcbDataPacket<T> msg, unsigned long src, sequence seq) {
     assert(seq == expectedIDs[src]);
 
     lcDeliver(msg.data, src);
@@ -104,7 +104,7 @@ void LcReceptionStore<T>::unsafeDeliverPending(unsigned long src, sequence expec
         LcbDataPacket<T> msg = pending[msgSrc][msgSeq];
         if (unsafeCanDeliver(msg)) {
             pending[msgSrc].erase(msgSeq);
-            unsafeFifoDeliver(msg, msgSrc, msgSeq);
+            unsafeLcDeliver(msg, msgSrc, msgSeq);
         }
     }
 }

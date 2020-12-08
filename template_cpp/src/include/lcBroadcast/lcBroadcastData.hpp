@@ -15,6 +15,11 @@
 template<class T>
 class LcbDataPacket : public Serializable {
 public:
+    static unsigned long numTotalHosts;
+
+    static size_t size();
+
+public:
     T data;
     std::unordered_map<unsigned long, sequence> dependencies;
 
@@ -26,6 +31,14 @@ public:
 
     void deserialize(std::istream &is) override;
 };
+
+template<class T>
+unsigned long LcbDataPacket<T>::numTotalHosts = 0;
+
+template<class T>
+size_t LcbDataPacket<T>::size() {
+    return T::size() + numTotalHosts * (sizeof(unsigned long) + sizeof(sequence));
+}
 
 template<class T>
 void LcbDataPacket<T>::serialize(std::ostream &os) {
@@ -44,7 +57,7 @@ template<class T>
 void LcbDataPacket<T>::deserialize(std::istream &is) {
     data.deserialize(is);
 
-    while(is.peek() != std::char_traits<char>::eof()) {
+    while (is.peek() != std::char_traits<char>::eof()) {
         auto host = Utils::deserializeNumericType<unsigned long>(is);
         auto seq = Utils::deserializeNumericType<sequence>(is);
 

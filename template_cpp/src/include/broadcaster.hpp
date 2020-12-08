@@ -12,6 +12,11 @@
 template<class T>
 class Integer : public Serializable {
 public:
+    static size_t size() {
+        return sizeof(T);
+    }
+
+public:
     T val_;
 
     Integer() = default;
@@ -56,7 +61,7 @@ public:
     void writeOutput();
 
 private:
-    void deliver(const Integer<sequence>& msg, unsigned long src);
+    void deliver(const Integer<sequence> &msg, unsigned long src);
 
 protected:
     void waitForStop() override;

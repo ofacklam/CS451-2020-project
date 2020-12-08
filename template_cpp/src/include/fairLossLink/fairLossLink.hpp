@@ -109,12 +109,14 @@ void FairLossLink<T>::flSend(T msg, unsigned long dst) {
 // Socket reception logic inspired from https://beej.us/guide/bgnet/html/#datagram
 template<class T>
 void FairLossLink<T>::receiveLoop() {
+    size_t msgSize = T::size();
+    char *netMsg = reinterpret_cast<char *>(malloc(msgSize));
+
     while (!shouldStop()) {
         // Receive a packet from network
-        char netMsg[sizeof(T)];
         sockaddr_storage srcAddr{};
         socklen_t addrLen = sizeof(srcAddr);
-        auto size = recvfrom(socketFD, netMsg, sizeof(netMsg), 0, reinterpret_cast<sockaddr *>(&srcAddr), &addrLen);
+        auto size = recvfrom(socketFD, netMsg, msgSize, 0, reinterpret_cast<sockaddr *>(&srcAddr), &addrLen);
 
         if (shouldStop())
             break;
@@ -135,6 +137,8 @@ void FairLossLink<T>::receiveLoop() {
             flDeliver(msg, id);
         }
     }
+
+    free(netMsg);
 }
 
 template<class T>

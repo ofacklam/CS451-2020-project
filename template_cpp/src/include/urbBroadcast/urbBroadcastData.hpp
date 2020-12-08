@@ -16,6 +16,9 @@
 template<class T>
 class UrbDataPacket : public Serializable {
 public:
+    static size_t size();
+
+public:
     unsigned long emitter;
     sequence seq;
     T data;
@@ -28,6 +31,11 @@ public:
 
     void deserialize(std::istream &is) override;
 };
+
+template<class T>
+size_t UrbDataPacket<T>::size() {
+    return sizeof(emitter) + sizeof(seq) + T::size();
+}
 
 template<class T>
 void UrbDataPacket<T>::serialize(std::ostream &os) {
