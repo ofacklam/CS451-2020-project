@@ -96,15 +96,16 @@ void PerfectLink<T>::pSend(T payload, unsigned long dst) {
 template<class T>
 void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
     // Set up timings
-    auto retryTime = 100ms;
-    auto granularity = 200us;
+    auto retryTime = 1000ms;
+    auto timeIncrement = 10ms;
     auto maxPending = 500ul;
-    unsigned long maxPendingPerDest = maxPending / hosts.size();
+    auto pendingIncrement = 50ul;
 
     // Internal pending set for the send loop
     std::unordered_map<unsigned long, std::queue<PlDataPacket<T>>> pending;
     auto currentDest = hosts.begin();
     auto nextWakeup = std::chrono::high_resolution_clock::now() + retryTime;
+    auto totalPending = 0ul;
 
     while (!shouldStop()) {
         auto dst = currentDest->id;
@@ -125,23 +126,50 @@ void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
             break;
 
         // Try to get new packets
-        bool success = true;
-        while (newQueue.size() < maxPendingPerDest && success) {
+        while (newQueue.size() < maxPending / hosts.size()) {
             PlDataPacket<T> msg{};
-            success = sendQueues[dst].dequeue(&msg, 0);
+            bool success = sendQueues[dst].dequeue(&msg, 0);
             if (success)
                 newQueue.push(msg);
+            else
+                break;
         }
+        totalPending += newQueue.size();
 
         // Update pointers
         pending[dst] = newQueue;
         currentDest++;
         if (currentDest == hosts.end()) {
+            // Update next cycle
             currentDest = hosts.begin();
+            if (nextWakeup - std::chrono::high_resolution_clock::now() > retryTime / 2) {
+                // Room for more processing
+                /*if (totalPending < 9 * maxPending / 10) {
+                    if (retryTime > 2 * timeIncrement)
+                        retryTime -= timeIncrement; // increase frequency
+                } else {*/
+                if (totalPending < 100000ul)
+                    maxPending = totalPending + pendingIncrement; // increase buffer
+                //}
+            } else {
+                // Reduce processing
+                //if (totalPending < 9 * maxPending / 10) {
+                if (maxPending > 2 * pendingIncrement)
+                    maxPending -= pendingIncrement; // reduce buffer
+                /*} else {
+                    if (retryTime < 5000ms)
+                        retryTime += timeIncrement; // decrease frequency
+                }*/
+            }
+
+            // Sleep until next cycle
             std::this_thread::sleep_until(nextWakeup);
             nextWakeup = std::chrono::high_resolution_clock::now() + retryTime;
+            totalPending = 0;
         }
     }
+
+    std::cout << "maxPending: " << maxPending << std::endl;
 }
 
 template<class T>
