@@ -9,11 +9,30 @@ Broadcaster::Broadcaster(unsigned long id, const std::vector<Parser::Host> &host
                          const std::string &configPath, std::string outputPath,
                          unsigned long long capacity)
         : outputPath(std::move(outputPath)),
-          fifo(id, hosts, [this](auto &&msg, auto &&src) { deliver(msg, src); }, capacity),
+          lcb(id, hosts, [this](auto &&msg, auto &&src) { deliver(msg, src); }, capacity),
           ownID(id) {
     // Get number of messages to broadcast
     std::ifstream in(configPath);
     in >> numMessages;
+
+    // Parse dependency lines
+    std::vector<unsigned long> deps;
+    std::string line;
+    while(std::getline(in, line)) {
+        std::istringstream iss(line);
+
+        unsigned long hostID;
+        iss >> hostID;
+        if(hostID != id)
+            continue;
+
+
+        unsigned long dep;
+        while(iss >> dep) {
+            deps.push_back(dep);
+        }
+    }
+    lcb.setDependencies(deps);
 }
 
 void Broadcaster::broadcast() {
@@ -23,7 +42,7 @@ void Broadcaster::broadcast() {
             std::lock_guard<std::mutex> lk(mLog);
             log << "b " << s << std::endl;
         }
-        fifo.fifoBroadcast(Integer(s));
+        lcb.lcBroadcast(Integer(s));
     }
 
     // Wait for finish
@@ -56,5 +75,5 @@ void Broadcaster::deliver(const Integer<sequence>& msg, unsigned long src) {
 }
 
 void Broadcaster::waitForStop() {
-    fifo.stop();
+    lcb.stop();
 }

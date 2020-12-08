@@ -31,9 +31,10 @@ private:
 public:
     LcBroadcast(unsigned long id,
                 const std::vector<Parser::Host> &hosts,
-                std::vector<unsigned long> dependencies,
                 const std::function<void(T, unsigned long)> &fifoDeliver,
                 unsigned long long capacity = 100);
+
+    void setDependencies(std::vector<unsigned long> &deps);
 
     void lcBroadcast(T payload);
 
@@ -46,11 +47,15 @@ protected:
 
 template<class T>
 LcBroadcast<T>::LcBroadcast(unsigned long id, const std::vector<Parser::Host> &hosts,
-                            std::vector<unsigned long> dependencies,
                             const std::function<void(T, unsigned long)> &fifoDeliver,
                             unsigned long long int capacity)
         : urb(id, hosts, [this](auto &&msg, auto &&src, auto &&seq) { return urbDeliver(msg, src, seq); }, capacity),
-          nextID(0), ownID(id), dependencies(std::move(dependencies)), receptionStore(fifoDeliver) {}
+          nextID(0), ownID(id), receptionStore(fifoDeliver) {}
+
+template<class T>
+void LcBroadcast<T>::setDependencies(std::vector<unsigned long> &deps) {
+    dependencies = deps;
+}
 
 template<class T>
 void LcBroadcast<T>::lcBroadcast(T payload) {
@@ -60,7 +65,7 @@ void LcBroadcast<T>::lcBroadcast(T payload) {
 
         // Add dependencies
         std::unordered_map<unsigned long, sequence> vectorClock = receptionStore.getVectorClock();
-        for(unsigned long dep: dependencies) {
+        for (unsigned long dep: dependencies) {
             msg.dependencies[dep] = vectorClock[dep];
         }
         // Fifo constraint

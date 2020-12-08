@@ -6,6 +6,7 @@
 #define DA_PROJECT_BROADCASTER_HPP
 
 #include "fifoBroadcast/fifoBroadcast.hpp"
+#include "lcBroadcast/lcBroadcast.hpp"
 
 
 template<class T>
@@ -35,7 +36,7 @@ private:
     std::string outputPath;
 
     // Broadcasting abstraction
-    FifoBroadcast<Integer<sequence>> fifo;
+    LcBroadcast<Integer<sequence>> lcb;
 
     // Reception --> for timing end of broadcast
     unsigned long ownID;

@@ -7,15 +7,17 @@
 
 #include <mutex>
 #include <unordered_map>
+#include <set>
 #include <functional>
 #include <iostream>
 #include <algorithm>
+#include <cassert>
 
 #include "utils/sequenceNumberStore.hpp"
 #include "lcBroadcastData.hpp"
 
 
-typedef std::unordered_set<std::pair<unsigned long, sequence>> descendants;
+typedef std::set<std::pair<unsigned long, sequence>> descendants;
 
 template<class T>
 class LcReceptionStore {
@@ -24,10 +26,10 @@ private:
     std::unordered_map<unsigned long, sequence> expectedIDs;
     std::unordered_map<unsigned long, std::unordered_map<sequence, LcbDataPacket<T>>> pending;
     std::unordered_map<unsigned long, std::unordered_map<sequence, descendants>> implications;
-    std::function<void(T, unsigned long)> fifoDeliver;
+    std::function<void(T, unsigned long)> lcDeliver;
 
 public:
-    explicit LcReceptionStore(std::function<void(T, unsigned long)> fifoDeliver) : fifoDeliver(fifoDeliver) {}
+    explicit LcReceptionStore(std::function<void(T, unsigned long)> lcDeliver) : lcDeliver(lcDeliver) {}
 
     void urbDeliver(LcbDataPacket<T> msg, unsigned long src, sequence seq);
 
@@ -65,7 +67,7 @@ void LcReceptionStore<T>::unsafeAddPending(LcbDataPacket<T> &msg, unsigned long 
     pending[src][seq] = msg;
     auto msgIdentifier = std::make_pair(src, seq);
 
-    for (std::pair<unsigned long, sequence> &dep: msg.dependencies) {
+    for (std::pair<unsigned long, sequence> dep: msg.dependencies) {
         implications[dep.first][dep.second].insert(msgIdentifier);
     }
 }
@@ -80,9 +82,9 @@ bool LcReceptionStore<T>::unsafeCanDeliver(LcbDataPacket<T> &pkt) {
 
 template<class T>
 void LcReceptionStore<T>::unsafeFifoDeliver(LcbDataPacket<T> msg, unsigned long src, sequence seq) {
-    static_assert(seq == expectedIDs[src], "Error: Expected ID from src mismatch with received & deliverable");
+    assert(seq == expectedIDs[src]);
 
-    fifoDeliver(msg, src);
+    lcDeliver(msg.data, src);
     expectedIDs[src]++;
     unsafeDeliverPending(src, expectedIDs[src]);
 }
