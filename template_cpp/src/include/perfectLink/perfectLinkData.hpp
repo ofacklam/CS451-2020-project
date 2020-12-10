@@ -18,14 +18,14 @@ public:
 
 public:
     sequence id;
-    T payload{};
+    std::shared_ptr<T> payload;
     bool isData;
 
-    PlDataPacket() : id(0), isData(false) {}
+    PlDataPacket() : id(0), payload(std::make_shared<T>()), isData(false) {}
 
-    explicit PlDataPacket(sequence seq) : id(seq), isData(false) {}
+    explicit PlDataPacket(sequence seq) : id(seq), payload(std::make_shared<T>()), isData(false) {}
 
-    PlDataPacket(sequence id, T payload) : id(id), payload(payload), isData(true) {}
+    PlDataPacket(sequence id, std::shared_ptr<T> payload) : id(id), payload(payload), isData(true) {}
 
     void serialize(std::ostream &os) override;
 
@@ -42,7 +42,7 @@ void PlDataPacket<T>::serialize(std::ostream &os) {
     Utils::serializeNumericType(id, os);
 
     if (isData) {
-        payload.serialize(os);
+        payload->serialize(os);
     }
 }
 
@@ -53,7 +53,7 @@ void PlDataPacket<T>::deserialize(std::istream &is) {
     if (is.peek() == std::char_traits<char>::eof()) {
         isData = false;
     } else {
-        payload.deserialize(is);
+        payload->deserialize(is);
         isData = true;
     }
 }

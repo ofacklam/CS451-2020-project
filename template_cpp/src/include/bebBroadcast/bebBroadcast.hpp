@@ -39,10 +39,11 @@ BebBroadcast<T>::BebBroadcast(unsigned long id, const std::vector<Parser::Host> 
 
 template<class T>
 void BebBroadcast<T>::bebBroadcast(T msg) {
+    std::shared_ptr<T> ptrMsg = std::make_shared<T>(msg);
     for (auto &h: hosts) {
         if (shouldStop())
             return;
-        pLink.pSend(msg, h.id);
+        pLink.pSend(ptrMsg, h.id);
     }
 }
 

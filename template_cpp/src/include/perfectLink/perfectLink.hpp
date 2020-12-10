@@ -50,7 +50,7 @@ public:
                 const std::function<void(T, unsigned long)> &pDeliver,
                 unsigned long numWorkers = 10);
 
-    void pSend(T payload, unsigned long dst);
+    void pSend(std::shared_ptr<T> payload, unsigned long dst);
 
 private:
     void sendLoop(const std::vector<Parser::Host> &hosts);
@@ -85,7 +85,7 @@ PerfectLink<T>::PerfectLink(unsigned long id, const std::vector<Parser::Host> &h
 }
 
 template<class T>
-void PerfectLink<T>::pSend(T payload, unsigned long dst) {
+void PerfectLink<T>::pSend(std::shared_ptr<T> payload, unsigned long dst) {
     if (nextIDs.count(dst) <= 0)
         return;
 
@@ -182,7 +182,7 @@ void PerfectLink<T>::flDeliver(PlDataPacket<T> dp, unsigned long src) {
             flLink.flSend(ack, src);
             bool delivered = storeDelivered[src].add(dp.id);
             if (!delivered)
-                deliverQueue.enqueue(std::make_pair(dp.payload, src));
+                deliverQueue.enqueue(std::make_pair(*dp.payload, src));
         } else {
             // ACK packet: add to storeACKed
             storeACKed[src].add(dp.id);
