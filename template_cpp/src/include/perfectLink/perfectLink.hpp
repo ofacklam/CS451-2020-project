@@ -148,8 +148,8 @@ void PerfectLink<T>::sendLoop(const std::vector<Parser::Host> &hosts) {
                     if (retryTime > 2 * timeIncrement)
                         retryTime -= timeIncrement; // increase frequency
                 } else {*/
-                if (totalPending < 100000ul)
-                    maxPending = totalPending + pendingIncrement; // increase buffer
+                if (maxPending < 100000ul)
+                    maxPending += pendingIncrement; // increase buffer
                 //}
             } else {
                 // Reduce processing
